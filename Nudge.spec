@@ -9,7 +9,15 @@ a = Analysis(
     # under %APPDATA%\Nudge\ at runtime — they are NOT bundled with the EXE.
     # Only static assets (icon) are included here.
     datas=[('icon.ico', '.')],
-    hiddenimports=[],
+    # PyQt6.sip is the SIP runtime that PyQt6's generated bindings depend on;
+    # PyInstaller's static analysis does not pick it up reliably, so we list
+    # it (and the most commonly missed Qt submodules) explicitly.
+    hiddenimports=[
+        "PyQt6.sip",
+        "PyQt6.QtCore",
+        "PyQt6.QtGui",
+        "PyQt6.QtWidgets",
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
