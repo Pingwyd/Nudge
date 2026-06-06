@@ -1,0 +1,90 @@
+# ─── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+.tox/
+.nox/
+
+# ─── Virtual environments ───────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ─── PyInstaller build output ──────────────────────────────────────────────
+build/
+dist/
+*.spec.bak
+*.pkg
+*.toc
+xref-*.html
+warn-*.txt
+
+# ─── Inno Setup output ─────────────────────────────────────────────────────
+Output/
+# Local installer / zip artifacts (CI is the source of truth for releases)
+Nudge-Setup-*.exe
+Nudge-*-windows.zip
+Nudge-*.exe
+
+# ─── IDE / editor ──────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ─── OS junk ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ─── App data (when running from source) ───────────────────────────────────
+# Real user data lives under %APPDATA%\Nudge — these are dev convenience
+# copies only and should never be committed.
+appstate.json
+tasks.json
+groups.json
+history.json
+data/
+nudge/
+Nudge/
+
+# ─── Logs ──────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ─── Scratch / temp ────────────────────────────────────────────────────────
+temp/
+
+# ─── Old / stale build specs (active spec is Nudge.spec) ───────────────────
+Daily Tasks.spec
+Dialy Tasks.spec
+main.spec
+
+# ─── Personal working notes (kept locally, not in the public repo) ─────────
+aadditions.md
+context.md
+fix_later.md
+notes.md
+MASTER_PROJECT_CONTEXT.md
+KNOWN_LIMITATIONS.md
+execution_plan_extracted.txt
+Project context
+tasks_export.txt
+
+# ─── Reference images not used by the build ────────────────────────────────
+istockphoto-*.jpg
