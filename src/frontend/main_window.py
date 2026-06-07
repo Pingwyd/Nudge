@@ -274,6 +274,7 @@ class TaskRowWidget(QWidget):
             self, self.label, reserved, editor=self.editor
         )
         self.set_text_size(text_size)
+        QTimer.singleShot(0, self.sync_text_layout)
 
     def _handle_toggled(self, checked):
         if self.on_toggled:
@@ -2173,6 +2174,9 @@ class MainWindow(QMainWindow):
             self._enable_resize_hover_tracking(central)
 
     def _append_task_row_widget(self, task: dict) -> TaskRowWidget:
+        self._sync_task_list_viewport_width()
+        from PyQt6.QtWidgets import QApplication
+        QApplication.processEvents()
         groups_enabled = self.app_state.get("groupsEnabled", True)
         fresh = StateManager("appstate.json")
         fresh.load()

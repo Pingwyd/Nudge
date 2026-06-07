@@ -87,12 +87,13 @@ def available_text_width(host: QWidget, reserved: Iterable[QWidget]) -> int:
         widget_count += 1
         widget = item.widget()
         if widget in reserved_set:
-            available -= widget.width()
+            w = widget.width() or widget.sizeHint().width()
+            available -= w
 
     if widget_count > 1:
         available -= layout.spacing() * (widget_count - 1)
 
-    return max(1, available)
+    return max(MIN_TEXT_COLUMN_WIDTH, available)
 
 
 class ResponsiveTextRowHelper:
