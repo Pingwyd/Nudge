@@ -223,15 +223,6 @@ class TaskRowWidget(QWidget):
             self._indent_spacer.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
             layout.addWidget(self._indent_spacer)
 
-        self.checkbox = QCheckBox()
-        self.checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.checkbox.setChecked(checked)
-        self.checkbox.toggled.connect(self._handle_toggled)
-        self.checkbox.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.checkbox.customContextMenuRequested.connect(lambda pos: self.contextMenuEventFromChild(self.checkbox.mapToGlobal(pos)))
-        self.checkbox.setStyleSheet("padding: 0px; margin: 0px; min-height: 0;")
-        layout.addWidget(self.checkbox, 0, Qt.AlignmentFlag.AlignVCenter)
-
         self.content_stack = QStackedWidget()
         # Height is set in _sync_content_stack_height() to match the visible page only.
         self.content_stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -268,7 +259,7 @@ class TaskRowWidget(QWidget):
         self.edit_btn.clicked.connect(self.toggle_edit_mode)
         layout.addWidget(self.edit_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        reserved = [self.checkbox, self.edit_btn]
+        reserved = [self.edit_btn]
         if self._indent_spacer is not None:
             reserved.insert(0, self._indent_spacer)
         self._text_layout = ResponsiveTextRowHelper(
@@ -290,10 +281,7 @@ class TaskRowWidget(QWidget):
         editor_font.setPointSize(text_size)
         self.editor.setFont(editor_font)
         self.editor.setStyleSheet(f"font-size: {int(text_size)}px;")
-        # Scale checkbox and Edit button to match the text size so all three
-        # sit on the same baseline regardless of the slider value.
         side_h = max(18, int(text_size) + 4)
-        self.checkbox.setFixedHeight(side_h)
         self.edit_btn.setFixedHeight(side_h)
         self.edit_btn.setStyleSheet(
             f"font-size: {max(11, int(text_size) - 2)}px; padding: 2px 10px; min-height: 0;"
@@ -306,7 +294,7 @@ class TaskRowWidget(QWidget):
 
     def _sync_content_stack_height(self):
         """Stage 4: stack height tracks only the visible page (label or single-line editor)."""
-        ht_reserved = [self.checkbox, self.edit_btn]
+        ht_reserved = [self.edit_btn]
         if self._indent_spacer is not None:
             ht_reserved.insert(0, self._indent_spacer)
         column_width = available_text_width(self, ht_reserved)
@@ -402,8 +390,9 @@ class TaskRowWidget(QWidget):
         if event.button() == Qt.MouseButton.LeftButton and self._drag_start_pos is not None:
             pos = event.position().toPoint()
             clicked_child = self.childAt(pos)
-            if clicked_child not in (self.checkbox, self.edit_btn, self.editor):
-                self.checkbox.toggle()
+            if clicked_child not in (self.edit_btn, self.editor):
+                if self.on_toggled:
+                    self.on_toggled(True)
                 event.accept()
                 self._drag_start_pos = None
                 return
