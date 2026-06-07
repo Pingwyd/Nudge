@@ -26,6 +26,7 @@ class UpdateCheckResult:
 FRIENDLY_CHANGELOGS: dict[str, str] = {
     "1.1.0": "Auto-update, system tray, and critical bug fixes. Nudge can now update itself and minimizes to tray instead of closing.",
     "1.2.0": "Tutorial refresh, What\u2019s New popup, Buy Me a Coffee support button, and user-friendly changelog display.",
+    "1.2.1": "Render performance boost, memory leak fixes, smaller build size, and end-to-end verification bundle.",
 }
 
 
