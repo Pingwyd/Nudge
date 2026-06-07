@@ -92,7 +92,6 @@ from src.frontend.frameless_chrome import FramelessChromeController
 from src.frontend.responsive_text import (
     ResponsiveTextRowHelper,
     apply_editor_field_width,
-    available_text_width,
     fix_single_line_editor_height,
     label_content_height,
     sync_stacked_page_height,
@@ -266,6 +265,7 @@ class TaskRowWidget(QWidget):
         self._text_layout = ResponsiveTextRowHelper(
             self, self.label, reserved, editor=self.editor
         )
+        self._text_layout.set_content_stack(self.content_stack)
         self.set_text_size(text_size)
         QTimer.singleShot(0, self.sync_text_layout)
 
@@ -275,11 +275,11 @@ class TaskRowWidget(QWidget):
 
     def set_text_size(self, text_size):
         font = self.label.font()
-        font.setPointSize(text_size)
+        font.setPixelSize(text_size)
         self.label.setFont(font)
         self.label.setStyleSheet(f"font-size: {int(text_size)}px;")
         editor_font = self.editor.font()
-        editor_font.setPointSize(text_size)
+        editor_font.setPixelSize(text_size)
         self.editor.setFont(editor_font)
         self.editor.setStyleSheet(f"font-size: {int(text_size)}px;")
         side_h = max(18, int(text_size) + 4)
@@ -295,10 +295,7 @@ class TaskRowWidget(QWidget):
 
     def _sync_content_stack_height(self):
         """Content stack height accounts for full wrapped text height."""
-        ht_reserved = [self.edit_btn]
-        if self._indent_spacer is not None:
-            ht_reserved.insert(0, self._indent_spacer)
-        column_width = available_text_width(self, ht_reserved)
+        column_width = max(1, self.content_stack.width())
         if self._editing:
             apply_editor_field_width(self.editor, column_width)
             fix_single_line_editor_height(self.editor)
@@ -1332,7 +1329,6 @@ class SettingsDialog(QDialog):
         self.state_manager.save()
         self._saved_snapshot = self._build_snapshot()
         self._has_unsaved_changes = False
-        self._initial_theme = normalize_theme_id(self.state_manager.state.get("theme", "dark"))
 
         if parent is not None and hasattr(parent, "task_row_widgets"):
             groups_changed = self.groups_enabled_cb.isChecked() != old_groups_enabled
@@ -1354,6 +1350,7 @@ class SettingsDialog(QDialog):
                 parent._sync_task_row_text_layouts()
             parent.setUpdatesEnabled(True)
             parent.update()
+            self._initial_theme = normalize_theme_id(self.state_manager.state.get("theme", "dark"))
 
         refresh_glass_shells(
             self,
@@ -1644,8 +1641,8 @@ class MainWindow(QMainWindow):
         t.start()
 
     def _on_update_check_done(self, result):
-        if result is None:
-            ThemedMessageDialog.information(self, "Update Check", "Could not check for updates. Check your internet connection.")
+        if result.error:
+            ThemedMessageDialog.information(self, "Update Check", f"Could not check for updates.\n\n{result.error}")
         elif result.available:
             self._show_update_dialog(result)
         else:
@@ -1941,6 +1938,12 @@ class MainWindow(QMainWindow):
             self.tasks_widget.setMinimumWidth(viewport_w - scrollbar_w)
 
     def _sync_task_row_text_layouts(self):
+        self._sync_task_list_viewport_width()
+        if self.tasks_layout is not None:
+            self.tasks_layout.activate()
+        for section in self.group_sections.values():
+            if hasattr(section, "force_layout"):
+                section.force_layout()
         for row in self.task_row_widgets.values():
             if hasattr(row, "sync_text_layout"):
                 row.sync_text_layout()
