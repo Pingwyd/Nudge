@@ -66,7 +66,7 @@ from src.backend.task_groups import (
     tasks_for_group,
 )
 from src.backend.window_layer import compose_main_window_flags, reconcile_layer_settings
-from src.backend.updater import check_for_update, perform_update, UpdateCheckResult
+from src.backend.updater import check_for_update, perform_update, parse_changelog, UpdateCheckResult
 from src import __version__
 from src.frontend.update_dialog import UpdateInfoDialog
 from src.frontend.history_row import HistoryRowWidget
@@ -619,7 +619,6 @@ class TutorialDialog(QDialog):
         features = [
             ("Add a task", "Type in the input bar and press Enter. Click anywhere else to remove focus from it."),
             ("Auto-scroll", "The list scrolls automatically so your newest task is always visible."),
-            ("Mark done", "Check the box next to a task to cross it off."),
             ("Edit / Delete", "Right-click a task or use the Edit button on its right."),
             ("Groups", "Use the Group dropdown and + button to organize tasks. Disable groups in Settings \u2192 Advanced for a flat list view."),
             ("Drag to reorder", "Drag a task by its text to reorder it within its group or move it to another group."),
@@ -628,6 +627,9 @@ class TutorialDialog(QDialog):
             ("Settings", "Click \u2699 to open Settings with 5 tabs: General, Appearance, Keyboard Shortcuts, Export, and Advanced."),
             ("Always on Top", "Press Alt+T to keep the window above others."),
             ("Export", "Press Ctrl+E or use the Export tab in Settings to export tasks as .txt, .md, or .csv."),
+            ("Check for updates", "Settings \u2192 General or click \U0001f504 in the title bar to check for new versions."),
+            ("Tray icon", "Right-click the tray icon to show the window or quit. The \u2716 close button minimizes to tray."),
+            ("Support development", "Click \u2615 in the title bar to buy me a coffee or sponsor on GitHub."),
             ("Resize", "Drag any edge or corner of the window."),
             ("Quick Quit", "Press Escape twice within 1 second to close the app."),
         ]
@@ -1462,6 +1464,13 @@ class MainWindow(QMainWindow):
         if not self.app_state.get("seenTutorial"):
             self._show_tutorial()
 
+        # "What's New" popup after an update — deferred so UI is ready
+        last_seen = self.app_state.get("lastSeenVersion", "")
+        if last_seen and last_seen < __version__:
+            QTimer.singleShot(1000, self._show_whats_new)
+        self.app_state["lastSeenVersion"] = __version__
+        self.state_manager.save()
+
         # Uncomment this to pin to desktop automatically (warning: window will be unmovable by standard dragging)
         # pin_to_desktop(int(self.winId()))
 
@@ -1473,6 +1482,14 @@ class MainWindow(QMainWindow):
         if not self.app_state.get("seenTutorial"):
             self.app_state["seenTutorial"] = True
             self.state_manager.save()
+
+    def _show_whats_new(self):
+        from src.frontend.whats_new_dialog import WhatsNewDialog
+        changelog = self.app_state.get("lastChangelog", "Bug fixes and improvements.")
+        dialog = WhatsNewDialog(changelog, self)
+        avoid = self._window_rects_to_avoid()
+        self._place_dialog_avoiding_rects(dialog, avoid)
+        dialog.exec()
 
     def _screen_available_rect(self):
         screen = self.screen()
@@ -1553,7 +1570,7 @@ class MainWindow(QMainWindow):
         theme = get_theme(theme_id)
         chrome_color = theme["colors"].get("chrome_icon", theme["colors"]["text"])
         self.btn_history.setIcon(_history_toolbar_icon(16, chrome_color))
-        for b in (self.btn_update, self.btn_feedback, self.btn_settings, self.btn_minimize, self.btn_exit):
+        for b in (self.btn_update, self.btn_feedback, self.btn_support, self.btn_settings, self.btn_minimize, self.btn_exit):
             b.setStyleSheet("")
 
     def apply_settings(self):
@@ -1599,6 +1616,9 @@ class MainWindow(QMainWindow):
 
     def _show_update_dialog(self, result: UpdateCheckResult):
         self.btn_update.setEnabled(True)
+        friendly, _ = parse_changelog(result.changelog, result.latest_version)
+        self.app_state["lastChangelog"] = friendly
+        self.state_manager.save()
         dialog = UpdateInfoDialog(result.latest_version, result.changelog, result.download_url, self)
         avoid = self._window_rects_to_avoid()
         self._place_dialog_avoiding_rects(dialog, avoid)
@@ -1773,7 +1793,15 @@ class MainWindow(QMainWindow):
         self.btn_history.clicked.connect(self.open_history)
         top_bar.addWidget(self.btn_history)
 
-        self.btn_settings = QPushButton("⚙")
+        self.btn_support = QPushButton("\u2615")
+        self.btn_support.setObjectName("chromeButton")
+        self.btn_support.setFixedSize(chrome_btn_sz, chrome_btn_sz)
+        self.btn_support.setToolTip("Support Nudge")
+        self.btn_support.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_support.clicked.connect(self._open_support_dialog)
+        top_bar.addWidget(self.btn_support)
+
+        self.btn_settings = QPushButton("\u2699")
         self.btn_settings.setObjectName("chromeButton")
         self.btn_settings.setFixedSize(chrome_btn_sz, chrome_btn_sz)
         self.btn_settings.setToolTip("Settings")
@@ -2696,6 +2724,12 @@ class MainWindow(QMainWindow):
         avoid = self._window_rects_to_avoid()
         self._place_dialog_avoiding_rects(dialog, avoid)
         self._run_side_dialog(dialog)
+
+    def _open_support_dialog(self):
+        from src.frontend.support_dialog import SupportDialog
+        dialog = SupportDialog(self)
+        self._place_dialog_avoiding_rects(dialog, self._window_rects_to_avoid())
+        dialog.exec()
 
     def _open_feedback_dialog(self):
         import json, sys, webbrowser

@@ -42,7 +42,9 @@ class StateManager:
             "groupsEnabled": False,
             "lastExportDir": "",
             "checkForUpdates": True,
-            "updateCheckUrl": "https://api.github.com/repos/Pingwyd/Nudge/releases/latest"
+            "updateCheckUrl": "https://api.github.com/repos/Pingwyd/Nudge/releases/latest",
+            "lastSeenVersion": "",
+            "lastChangelog": ""
         }
         self.app_name = "Nudge"
 

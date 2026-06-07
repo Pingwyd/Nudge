@@ -23,6 +23,22 @@ class UpdateCheckResult:
     changelog: str = ""
 
 
+FRIENDLY_CHANGELOGS: dict[str, str] = {
+    "1.1.0": "Auto-update, system tray, and critical bug fixes. Nudge can now update itself and minimizes to tray instead of closing.",
+    "1.2.0": "Tutorial refresh, What\u2019s New popup, Buy Me a Coffee support button, and user-friendly changelog display.",
+}
+
+
+def parse_changelog(release_body: str, version: str = "") -> tuple[str, str]:
+    """Return (friendly_version, full_changelog) split on ---."""
+    if "---" in release_body:
+        parts = release_body.split("---", 1)
+        return parts[0].strip(), parts[1].strip()
+    if version in FRIENDLY_CHANGELOGS:
+        return FRIENDLY_CHANGELOGS[version], release_body.strip()
+    return release_body.strip(), release_body.strip()
+
+
 def _parse_version(version_str: str) -> tuple:
     cleaned = version_str.lstrip("vV")
     parts = []
