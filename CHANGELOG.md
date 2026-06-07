@@ -5,6 +5,24 @@ All notable changes to Nudge are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-06-07
+
+### Fixed
+- **ABI mismatch crash that survived v1.0.2 → v1.0.4**: pinned
+  `PyQt6==6.6.1` in `requirements.txt` but did not pin **`PyQt6-Qt6`**
+  (the package that actually ships the Qt C++ libraries). The resolver
+  pulled `PyQt6-Qt6==6.11.1`, so the `PyQt6 6.6.1` Python C extension
+  was loading against Qt 6.11 libraries and failing with
+  `ImportError: DLL load failed while importing QtCore: The specified
+  procedure could not be found`. All previous "fixes" (PATH injection,
+  `add_dll_directory`, copying DLLs next to `.pyd` files) addressed
+  *loader search path* — they could not fix a symbol-level mismatch
+  inside Qt itself.
+- `requirements.txt` now pins `PyQt6==6.11.0` and `PyQt6-Qt6==6.11.1`
+  as a self-consistent set. Verified working in a clean venv matching
+  the CI environment, and the rebuilt EXE launches without the
+  PyInstaller crash dialog.
+
 ## [1.0.4] - 2026-06-06
 
 ### Fixed

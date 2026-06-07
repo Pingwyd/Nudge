@@ -27,6 +27,20 @@ Grab the latest Windows installer from the
 A portable `Nudge-1.0.0-windows.zip` is also provided for users who
 want to run Nudge without installing.
 
+### Windows SmartScreen
+
+Because the installer is not yet code-signed, Windows may show a
+**"Windows protected your PC"** prompt on first launch. This is
+expected for any newly released app. To proceed:
+
+1. Click **More info** in the dialog.
+2. Click **Run anyway**.
+
+If you'd like the warning to go away permanently, vote on
+[issue #1](#) (tracking code-signing acquisition) or grab the
+**portable zip** instead, which is also unsigned but smaller and
+faster to verify.
+
 ## Keyboard Shortcuts
 
 | Shortcut | Action                |
