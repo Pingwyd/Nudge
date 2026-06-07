@@ -67,9 +67,10 @@ def _ps_fetch(url, headers, timeout):
         "$s = [System.Console]::OpenStandardOutput();"
         "$s.Write($b, 0, $b.Length); $s.Close()"
     ).format(url.replace("'", "''"), hdr, timeout)
+    _ps_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     result = subprocess.run(
         ["powershell", "-NoProfile", "-Command", ps],
-        capture_output=True, timeout=timeout + 5,
+        capture_output=True, timeout=timeout + 5, creationflags=_ps_flags,
     )
     if result.returncode != 0:
         err = result.stderr.decode("utf-8", errors="replace").strip()
@@ -83,9 +84,10 @@ def _ps_download(url, dest_path, timeout=120):
         "$r = Invoke-WebRequest -Uri '{}' -Headers @{{\"User-Agent\"=\"Nudge/1.0\"}} "
         "-TimeoutSec {} -OutFile '{}' -UseBasicParsing"
     ).format(url.replace("'", "''"), timeout, str(dest_path).replace("'", "''"))
+    _ps_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     result = subprocess.run(
         ["powershell", "-NoProfile", "-Command", ps],
-        capture_output=True, timeout=timeout + 30,
+        capture_output=True, timeout=timeout + 30, creationflags=_ps_flags,
     )
     if result.returncode != 0:
         err = result.stderr.decode("utf-8", errors="replace").strip()
@@ -158,11 +160,15 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
     "1.2.4": (
         "\ud83d\udc1b Bug Fixes\n"
         "  \u2022 certifi not bundled in frozen EXE (update check always failed)\n"
-        "  \u2022 download_update missing SSL context\n"
+        "  \u2022 _ssl DLL crash at module import (app wouldn't start)\n"
+        "  \u2022 PowerShell window flashing during fallback HTTPS request\n"
+        "  \u2022 ThemedMessageDialog clipped long error text\n"
         "\n"
         "\ud83d\udce6 Improvements\n"
+        "  \u2022 PowerShell Invoke-WebRequest fallback when _ssl DLL is broken\n"
         "  \u2022 Logs written to %TEMP%\\Nudge_update.log for diagnostics\n"
-        "  \u2022 Error dialog now shows the actual exception detail"
+        "  \u2022 Error dialog now shows the actual exception detail\n"
+        "  \u2022 Changelog dialogs now render styled release notes"
     ),
 }
 
