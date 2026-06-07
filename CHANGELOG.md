@@ -5,6 +5,21 @@ All notable changes to Nudge are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-06-06
+
+### Fixed
+- **Startup crash after SmartScreen bypass**: `ImportError: DLL load
+  failed while importing QtCore: The specified procedure could not be
+  found.` PyQt6's C extension looked for `Qt6Core.dll` and the MSVC
+  runtime DLLs via the loader's default search order, which doesn't
+  reach the PyInstaller bundle. Added a runtime hook
+  (`pyqt6_runtime_hook.py`) that prepends `<bundle>/PyQt6/Qt6/bin` to
+  `PATH` and sets `QT_PLUGIN_PATH` / `QT_QPA_PLATFORM_PLUGIN_PATH` so
+  Qt and its platform plugin resolve at import time.
+- **Bulletproof PyQt6 / winotify bundling**: switched `Nudge.spec` to
+  use `collect_all("PyQt6")` and `collect_all("winotify")` so every
+  Qt module, plugin, and data file is included.
+
 ## [1.0.1] - 2026-06-06
 
 ### Fixed
