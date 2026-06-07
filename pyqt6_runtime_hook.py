@@ -27,6 +27,17 @@ def _meipass() -> str:
 
 bundle = _meipass()
 
+# Make sure the `PyQt6.sip` namespace module is importable. In
+# PyQt6 >= 6.6.1 the `.pyd` is shipped by the `pyqt6-sip` wheel
+# which installs it into the `PyQt6/` directory. Doing the import
+# here at hook time surfaces any "module not found" error to the
+# usual Python traceback rather than a generic PyInstaller error
+# dialog later.
+try:
+    import PyQt6.sip  # noqa: F401
+except Exception:
+    pass
+
 # PyInstaller's onedir layout puts the Qt runtime at:
 #   <bundle>/_internal/PyQt6/Qt6/bin
 #   <bundle>/_internal/PyQt6/Qt6/plugins

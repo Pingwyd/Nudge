@@ -5,6 +5,21 @@ All notable changes to Nudge are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-06-06
+
+### Fixed
+- **`No module named 'PyQt6.sip'` startup crash** (regression on
+  PyQt6 6.6.1). The SIP runtime is shipped by the **`pyqt6-sip`**
+  PyPI package, not by `PyQt6` itself. `collect_all("PyQt6")` does not
+  see it, so the `.pyd` was not bundled. Now `Nudge.spec` calls
+  `collect_all("pyqt6-sip")` and `requirements.txt` pins
+  `pyqt6-sip==13.11.1` as an explicit dependency.
+- **Removed invalid hiddenimports** (`PyQt6.QtGui.QFontMetrics` and
+  friends are classes inside `PyQt6.QtGui`, not submodules).
+- **Excluded unused Qt subsystems** (Qt3D, QtPdf, QtMultimedia,
+  QtPositioning, QtQml, QtQuick, etc.) — slimmer bundle and no more
+  "Library not found: Qt63DRender.dll" warnings.
+
 ## [1.0.2] - 2026-06-06
 
 ### Fixed

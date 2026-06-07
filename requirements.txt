@@ -1,4 +1,5 @@
 PyQt6==6.6.1
+pyqt6-sip==13.11.1
 winotify==1.1.0
 pyinstaller==6.3.0
 pytest==8.0.0
