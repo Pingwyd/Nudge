@@ -1,7 +1,26 @@
+from __future__ import annotations
+
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QDialog, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QTextEdit, QVBoxLayout
+from PyQt6.QtWidgets import QDialog, QFrame, QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout
 from src.frontend.theme import get_theme, normalize_theme_id, refresh_glass_shells
 from src import __app_name__, __version__
+
+
+def _changelog_to_html(text: str) -> str:
+    if not text:
+        return "<p>No release notes available.</p>"
+    lines = text.split("\n")
+    html_parts = ['<div style="font-size:13px; line-height:1.6;">']
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            html_parts.append("<br>")
+        elif stripped.startswith("•") or stripped.startswith("-"):
+            html_parts.append(f'<li style="margin:2px 0;">{stripped[1:].strip()}</li>')
+        else:
+            html_parts.append(f'<p style="margin:8px 0 4px 0; font-weight:bold;">{stripped}</p>')
+    html_parts.append("</div>")
+    return "".join(html_parts)
 
 
 class WhatsNewDialog(QDialog):
@@ -35,15 +54,11 @@ class WhatsNewDialog(QDialog):
         title.setFont(font)
         layout.addWidget(title)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
-
-        changelog_edit = QTextEdit()
-        changelog_edit.setReadOnly(True)
-        changelog_edit.setPlainText(self.changelog if self.changelog else "Bug fixes and improvements.")
-        scroll.setWidget(changelog_edit)
-        layout.addWidget(scroll, stretch=1)
+        changelog_browser = QTextBrowser()
+        changelog_browser.setOpenExternalLinks(False)
+        changelog_browser.setHtml(_changelog_to_html(self.changelog or "Bug fixes and improvements."))
+        changelog_browser.setStyleSheet("QTextBrowser { border: none; background: transparent; }")
+        layout.addWidget(changelog_browser, stretch=1)
 
         btn_row = QHBoxLayout()
         got_it = QPushButton("Got it!")

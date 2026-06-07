@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Optional
+
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog,
@@ -7,13 +11,31 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
-    QTextEdit,
+    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
 
 from src import __version__
 from src.frontend.theme import get_theme, normalize_theme_id, refresh_glass_shells
+
+
+def _changelog_to_html(text: str) -> str:
+    """Convert plain-text changelog (emoji headers + bullet items) to styled HTML."""
+    if not text:
+        return "<p>No release notes available.</p>"
+    lines = text.split("\n")
+    html_parts = ['<div style="font-size:13px; line-height:1.6;">']
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            html_parts.append("<br>")
+        elif stripped.startswith("•") or stripped.startswith("-"):
+            html_parts.append(f'<li style="margin:2px 0;">{stripped[1:].strip()}</li>')
+        else:
+            html_parts.append(f'<p style="margin:8px 0 4px 0; font-weight:bold;">{stripped}</p>')
+    html_parts.append("</div>")
+    return "".join(html_parts)
 
 
 class UpdateInfoDialog(QDialog):
@@ -63,15 +85,11 @@ class UpdateInfoDialog(QDialog):
         changelog_label.setFont(clfont)
         layout.addWidget(changelog_label)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
-
-        self.changelog_edit = QTextEdit()
-        self.changelog_edit.setReadOnly(True)
-        self.changelog_edit.setPlainText(self.changelog if self.changelog else "(No changelog available)")
-        scroll.setWidget(self.changelog_edit)
-        layout.addWidget(scroll, stretch=1)
+        self.changelog_browser = QTextBrowser()
+        self.changelog_browser.setOpenExternalLinks(False)
+        self.changelog_browser.setHtml(_changelog_to_html(self.changelog or "(No changelog available)"))
+        self.changelog_browser.setStyleSheet("QTextBrowser { border: none; background: transparent; }")
+        layout.addWidget(self.changelog_browser, stretch=1)
 
         note = QLabel("The app will restart after installing.")
         note.setAlignment(Qt.AlignmentFlag.AlignCenter)
