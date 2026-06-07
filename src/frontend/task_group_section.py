@@ -111,6 +111,13 @@ class TaskGroupSection(QWidget):
         name = self.group.get("name", "Group")
         self.header_btn.setText(f"{chevron}  {name}  ({len(self.task_rows)})")
 
+    def force_layout(self) -> None:
+        """Force recalculation of all nested layouts so rows have correct geometry."""
+        layout = self.layout()
+        if layout is not None:
+            layout.activate()
+        self.content_layout.activate()
+
     def sync_task_text_layouts(self) -> None:
         for row in self.task_rows:
             if hasattr(row, "sync_text_layout"):

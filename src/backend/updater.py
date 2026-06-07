@@ -1,6 +1,8 @@
 import json
+import logging
 import os
 import shutil
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -14,6 +16,23 @@ from urllib.error import URLError, HTTPError
 DEFAULT_CHECK_URL = "https://api.github.com/repos/Pingwyd/Nudge/releases/latest"
 DEFAULT_DOWNLOAD_BASE = "https://github.com/Pingwyd/Nudge/releases/latest/download"
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename=Path(tempfile.gettempdir()) / "Nudge_update.log",
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+
+# Build a trusted SSL context once at module level (certifi if available,
+# otherwise the system CA store — both work on Windows).
+_SSL_CONTEXT: ssl.SSLContext | None = None
+try:
+    import certifi
+    _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+    logging.debug("SSL context using certifi CA: %s", certifi.where())
+except Exception:
+    _SSL_CONTEXT = ssl.create_default_context()
+    logging.debug("SSL context using system default CA store")
+
 
 @dataclass
 class UpdateCheckResult:
@@ -21,6 +40,7 @@ class UpdateCheckResult:
     latest_version: str = ""
     download_url: str = ""
     changelog: str = ""
+    error: str = ""
 
 
 FRIENDLY_CHANGELOGS: dict[str, str] = {
@@ -75,6 +95,15 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
         "  \u2022 Fixed update checker failing with SSL certificate errors\n"
         "  \u2022 Better diagnostic logging for update check failures"
     ),
+    "1.2.4": (
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 certifi not bundled in frozen EXE (update check always failed)\n"
+        "  \u2022 download_update missing SSL context\n"
+        "\n"
+        "\ud83d\udce6 Improvements\n"
+        "  \u2022 Logs written to %TEMP%\\Nudge_update.log for diagnostics\n"
+        "  \u2022 Error dialog now shows the actual exception detail"
+    ),
 }
 
 
@@ -108,19 +137,12 @@ def check_for_update(
 ) -> Optional[UpdateCheckResult]:
     url = check_url or DEFAULT_CHECK_URL
     try:
-        import ssl as _ssl
-        try:
-            import certifi as _certifi
-            ctx = _ssl.create_default_context(cafile=_certifi.where())
-        except Exception:
-            ctx = _ssl.create_default_context()
         req = Request(url, headers={"Accept": "application/json", "User-Agent": "Nudge/1.0"})
-        with urlopen(req, timeout=timeout, context=ctx) as resp:
+        with urlopen(req, timeout=timeout, context=_SSL_CONTEXT) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception as exc:
-        import sys
-        print(f"[Nudge] Update check failed: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return None
+        logging.error("Update check failed: %s: %s", type(exc).__name__, exc)
+        return UpdateCheckResult(error=f"{type(exc).__name__}: {exc}")
 
     tag = data.get("tag_name", "")
     latest = _parse_version(tag)
@@ -161,7 +183,7 @@ def download_update(
 
     try:
         req = Request(download_url, headers={"User-Agent": "Nudge/1.0"})
-        with urlopen(req, timeout=60) as resp:
+        with urlopen(req, timeout=60, context=_SSL_CONTEXT) as resp:
             total = int(resp.headers.get("Content-Length", 0))
             downloaded = 0
             with open(dest_path, "wb") as f:
@@ -174,7 +196,8 @@ def download_update(
                     if progress_callback and total:
                         progress_callback(downloaded, total)
         return dest_path
-    except (URLError, HTTPError, OSError):
+    except (URLError, HTTPError, OSError) as exc:
+        logging.error("Download failed: %s: %s", type(exc).__name__, exc)
         if dest_path.exists():
             dest_path.unlink()
         return None
