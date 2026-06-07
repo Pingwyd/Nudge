@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import shutil
-import ssl
 import subprocess
 import sys
 import tempfile
@@ -22,16 +21,21 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
-# Build a trusted SSL context once at module level (certifi if available,
-# otherwise the system CA store — both work on Windows).
-_SSL_CONTEXT: ssl.SSLContext | None = None
-try:
-    import certifi
-    _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
-    logging.debug("SSL context using certifi CA: %s", certifi.where())
-except Exception:
-    _SSL_CONTEXT = ssl.create_default_context()
-    logging.debug("SSL context using system default CA store")
+_ssl_context = None
+
+def _get_ssl_context():
+    global _ssl_context
+    if _ssl_context is not None:
+        return _ssl_context
+    import ssl
+    try:
+        import certifi
+        _ssl_context = ssl.create_default_context(cafile=certifi.where())
+        logging.debug("SSL context using certifi CA: %s", certifi.where())
+    except Exception:
+        _ssl_context = ssl.create_default_context()
+        logging.debug("SSL context using system default CA store")
+    return _ssl_context
 
 
 @dataclass
@@ -138,7 +142,7 @@ def check_for_update(
     url = check_url or DEFAULT_CHECK_URL
     try:
         req = Request(url, headers={"Accept": "application/json", "User-Agent": "Nudge/1.0"})
-        with urlopen(req, timeout=timeout, context=_SSL_CONTEXT) as resp:
+        with urlopen(req, timeout=timeout, context=_get_ssl_context()) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception as exc:
         logging.error("Update check failed: %s: %s", type(exc).__name__, exc)
@@ -183,7 +187,7 @@ def download_update(
 
     try:
         req = Request(download_url, headers={"User-Agent": "Nudge/1.0"})
-        with urlopen(req, timeout=60, context=_SSL_CONTEXT) as resp:
+        with urlopen(req, timeout=60, context=_get_ssl_context()) as resp:
             total = int(resp.headers.get("Content-Length", 0))
             downloaded = 0
             with open(dest_path, "wb") as f:
