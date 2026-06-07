@@ -1556,6 +1556,7 @@ class MainWindow(QMainWindow):
 
     def _quit_from_tray(self):
         self._force_quit = True
+        self._skip_close_confirm = True
         self.close()
 
     def apply_app_theme(self) -> None:
@@ -1570,7 +1571,7 @@ class MainWindow(QMainWindow):
         theme = get_theme(theme_id)
         chrome_color = theme["colors"].get("chrome_icon", theme["colors"]["text"])
         self.btn_history.setIcon(_history_toolbar_icon(16, chrome_color))
-        for b in (self.btn_update, self.btn_feedback, self.btn_support, self.btn_settings, self.btn_minimize, self.btn_exit):
+        for b in (self.btn_menu, self.btn_settings, self.btn_minimize, self.btn_exit):
             b.setStyleSheet("")
 
     def apply_settings(self):
@@ -1607,10 +1608,12 @@ class MainWindow(QMainWindow):
         def _check():
             result = check_for_update(__version__)
             if result is None:
+                QTimer.singleShot(0, lambda: ThemedMessageDialog.information(self, "Update Check", "Could not check for updates. Check your internet connection."))
                 return
             if result.available:
                 QTimer.singleShot(0, lambda: self._show_update_dialog(result))
-        self.btn_update.setEnabled(False)
+            else:
+                QTimer.singleShot(0, lambda: ThemedMessageDialog.information(self, "Update Check", "You\u2019re up to date!"))
         t = threading.Thread(target=_check, daemon=True)
         t.start()
 
@@ -1767,21 +1770,22 @@ class MainWindow(QMainWindow):
         theme_id = normalize_theme_id(self.app_state.get("theme", "dark"))
         theme = get_theme(theme_id)
         chrome_color = theme["colors"].get("chrome_icon", theme["colors"]["text"])
-        self.btn_update = QPushButton("↻")
-        self.btn_update.setObjectName("chromeButton")
-        self.btn_update.setFixedSize(chrome_btn_sz, chrome_btn_sz)
-        self.btn_update.setToolTip("Check for Updates")
-        self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_update.clicked.connect(self._check_and_prompt_update)
-        top_bar.addWidget(self.btn_update)
+        self._overflow_menu = QMenu(self)
+        self._overflow_menu.setObjectName("overflowMenu")
+        act_update = self._overflow_menu.addAction("Check for Updates")
+        act_update.triggered.connect(self._check_and_prompt_update)
+        act_feedback = self._overflow_menu.addAction("Send Feedback")
+        act_feedback.triggered.connect(self._open_feedback_dialog)
+        act_support = self._overflow_menu.addAction("Support Nudge")
+        act_support.triggered.connect(self._open_support_dialog)
 
-        self.btn_feedback = QPushButton("💬")
-        self.btn_feedback.setObjectName("chromeButton")
-        self.btn_feedback.setFixedSize(chrome_btn_sz, chrome_btn_sz)
-        self.btn_feedback.setToolTip("Send Feedback")
-        self.btn_feedback.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_feedback.clicked.connect(self._open_feedback_dialog)
-        top_bar.addWidget(self.btn_feedback)
+        self.btn_menu = QPushButton("\u00b7\u00b7\u00b7")
+        self.btn_menu.setObjectName("chromeButton")
+        self.btn_menu.setFixedSize(chrome_btn_sz, chrome_btn_sz)
+        self.btn_menu.setToolTip("More")
+        self.btn_menu.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_menu.clicked.connect(self._show_overflow_menu)
+        top_bar.addWidget(self.btn_menu)
 
         self.btn_history = QPushButton()
         self.btn_history.setObjectName("chromeButton")
@@ -1792,14 +1796,6 @@ class MainWindow(QMainWindow):
         self.btn_history.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_history.clicked.connect(self.open_history)
         top_bar.addWidget(self.btn_history)
-
-        self.btn_support = QPushButton("\u2615")
-        self.btn_support.setObjectName("chromeButton")
-        self.btn_support.setFixedSize(chrome_btn_sz, chrome_btn_sz)
-        self.btn_support.setToolTip("Support Nudge")
-        self.btn_support.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_support.clicked.connect(self._open_support_dialog)
-        top_bar.addWidget(self.btn_support)
 
         self.btn_settings = QPushButton("\u2699")
         self.btn_settings.setObjectName("chromeButton")
@@ -2724,6 +2720,32 @@ class MainWindow(QMainWindow):
         avoid = self._window_rects_to_avoid()
         self._place_dialog_avoiding_rects(dialog, avoid)
         self._run_side_dialog(dialog)
+
+    def _show_overflow_menu(self):
+        self._style_overflow_menu()
+        self._overflow_menu.exec(self.btn_menu.mapToGlobal(QPoint(0, self.btn_menu.height())))
+
+    def _style_overflow_menu(self):
+        theme_id = normalize_theme_id(self.app_state.get("theme", "dark"))
+        theme = get_theme(theme_id)
+        bg = theme["colors"].get("surface", "#1e1e1e")
+        fg = theme["colors"].get("text", "#ffffff")
+        border = theme["colors"].get("border", "rgba(255,255,255,40)")
+        self._overflow_menu.setStyleSheet(f"""
+            QMenu {{
+                background: {bg};
+                color: {fg};
+                border: 1px solid {border};
+                border-radius: 8px;
+                padding: 4px 0;
+            }}
+            QMenu::item {{
+                padding: 6px 24px;
+            }}
+            QMenu::item:selected {{
+                background: rgba(255,255,255,30);
+            }}
+        """)
 
     def _open_support_dialog(self):
         from src.frontend.support_dialog import SupportDialog
