@@ -10,6 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QFrame, QWidget
 
 # --- Dark theme tokens (Liquid Glass) -------------------------------------------------
@@ -745,17 +746,20 @@ def refresh_glass_shells(
         resolved = deepcopy(theme or DARK_THEME)
 
     panel_css = glass_panel_stylesheet(resolved)
+    nested_css = nested_panel_stylesheet(resolved)
     for frame in root.findChildren(QFrame):
         if frame.objectName() == "glassPanel":
             frame.setStyleSheet(panel_css)
+        elif frame.objectName() == "nestedPanel":
+            frame.setStyleSheet(nested_css)
 
     style = root.style()
     if style is None:
         root.update()
         return
 
-    widgets = [root, *root.findChildren(QWidget)]
-    for widget in widgets:
+    all_widgets = [root] + root.findChildren(QWidget, options=Qt.FindChildOption.FindChildrenRecursively)
+    for widget in all_widgets:
         style.unpolish(widget)
         style.polish(widget)
         widget.update()

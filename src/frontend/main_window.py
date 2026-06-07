@@ -1356,6 +1356,11 @@ class SettingsDialog(QDialog):
             self,
             normalize_theme_id(self.state_manager.state.get("theme", "dark")),
         )
+        if parent is not None:
+            refresh_glass_shells(
+                parent,
+                normalize_theme_id(self.state_manager.state.get("theme", "dark")),
+            )
 
         return True
 
@@ -1542,6 +1547,8 @@ class MainWindow(QMainWindow):
         theme = get_theme(theme_id)
         chrome_color = theme["colors"].get("chrome_icon", theme["colors"]["text"])
         self.btn_history.setIcon(_history_toolbar_icon(16, chrome_color))
+        for b in (self.btn_update, self.btn_feedback, self.btn_settings, self.btn_minimize, self.btn_exit):
+            b.setStyleSheet("")
 
     def apply_settings(self):
         self.app_state = self.state_manager.state
