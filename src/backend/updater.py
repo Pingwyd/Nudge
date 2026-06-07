@@ -55,12 +55,17 @@ def _fetch_url(url, headers, timeout=10):
     return _ps_fetch(url, headers, timeout)
 
 def _ps_fetch(url, headers, timeout):
-    """Fallback HTTPS GET via PowerShell — bypasses Python's _ssl DLL entirely."""
+    """Fallback HTTPS GET via PowerShell — bypasses Python's _ssl DLL entirely.
+
+    Writes raw UTF-8 bytes to stdout via .NET's stdout stream to avoid
+    PowerShell pipeline encoding corruption (UTF-16LE → garbled text).
+    """
     hdr = "@{" + ";".join(f'"{k}"="{v}"' for k, v in headers.items()) + "}"
     ps = (
         "$r = Invoke-WebRequest -Uri '{}' -Headers {} -TimeoutSec {} -UseBasicParsing;"
-        "[System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8;"
-        "$r.Content"
+        "$b = [System.Text.Encoding]::UTF8.GetBytes($r.Content);"
+        "$s = [System.Console]::OpenStandardOutput();"
+        "$s.Write($b, 0, $b.Length); $s.Close()"
     ).format(url.replace("'", "''"), hdr, timeout)
     result = subprocess.run(
         ["powershell", "-NoProfile", "-Command", ps],
@@ -69,11 +74,7 @@ def _ps_fetch(url, headers, timeout):
     if result.returncode != 0:
         err = result.stderr.decode("utf-8", errors="replace").strip()
         raise RuntimeError(err or "PowerShell request failed")
-    out = result.stdout
-    # Strip UTF-8 BOM if present
-    if out[:3] == b"\xef\xbb\xbf":
-        out = out[3:]
-    return out
+    return result.stdout
 
 
 def _ps_download(url, dest_path, timeout=120):
