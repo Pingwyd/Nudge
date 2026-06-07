@@ -90,6 +90,7 @@ from src.backend.window_geometry import (
 from src.frontend.frameless_chrome import FramelessChromeController
 from src.frontend.responsive_text import (
     ResponsiveTextRowHelper,
+    apply_editor_field_width,
     available_text_width,
     fix_single_line_editor_height,
     label_content_height,
@@ -310,6 +311,7 @@ class TaskRowWidget(QWidget):
             ht_reserved.insert(0, self._indent_spacer)
         column_width = available_text_width(self, ht_reserved)
         if self._editing:
+            apply_editor_field_width(self.editor, column_width)
             fix_single_line_editor_height(self.editor)
             sync_stacked_page_height(self.content_stack, self.editor.height())
         else:
@@ -326,9 +328,12 @@ class TaskRowWidget(QWidget):
         self.content_stack.setCurrentIndex(1)
         self.edit_btn.setText("Save")
         self.content_stack.updateGeometry()
+        self.updateGeometry()
         self.sync_text_layout()
-        self.editor.setFocus()
-        self.editor.selectAll()
+        QTimer.singleShot(0, lambda: (
+            self.editor.setFocus(),
+            self.editor.selectAll()
+        ))
 
     def commit_edit(self):
         if not self._editing:
@@ -346,6 +351,7 @@ class TaskRowWidget(QWidget):
         self.content_stack.setCurrentIndex(0)
         self.edit_btn.setText("Edit")
         self.content_stack.updateGeometry()
+        self.updateGeometry()
         if self.on_commit:
             self.on_commit(new_text)
         self.sync_text_layout()
