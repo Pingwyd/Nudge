@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMenu,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSlider,
@@ -1506,12 +1507,30 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self._persist_window_geometry()
         if getattr(self, '_force_quit', False):
-            self._tray.hide()
-            super().closeEvent(event)
-        else:
-            event.ignore()
-            self.hide()
+            if getattr(self, '_skip_close_confirm', False):
+                self._tray.hide()
+                super().closeEvent(event)
+                return
+            reply = QMessageBox.question(
+                self,
+                "Quit Nudge?",
+                "Are you sure you want to quit Nudge?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self._tray.hide()
+                super().closeEvent(event)
+            else:
+                event.ignore()
+                self._force_quit = False
+            return
+        event.ignore()
+        self.hide()
+        if not getattr(self, '_tray_notified', False):
             self._tray.show_message("Nudge", "Still running in tray. Right-click tray icon to quit.")
+            self._tray_notified = True
+            QTimer.singleShot(10000, lambda: setattr(self, '_tray_notified', False))
 
     def _show_from_tray(self):
         self.showNormal()
@@ -1520,9 +1539,7 @@ class MainWindow(QMainWindow):
 
     def _quit_from_tray(self):
         self._force_quit = True
-        self._tray.hide()
-        from PyQt6.QtWidgets import QApplication
-        QApplication.instance().quit()
+        self.close()
 
     def apply_app_theme(self) -> None:
         """Re-apply global QSS when theme changes."""
@@ -1600,6 +1617,7 @@ class MainWindow(QMainWindow):
         success = perform_update(download_url, version)
         msg.close()
         if success:
+            self._skip_close_confirm = True
             self.close()
         else:
             from src.frontend.themed_message_dialog import ThemedMessageDialog
