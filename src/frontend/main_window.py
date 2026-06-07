@@ -1571,7 +1571,7 @@ class MainWindow(QMainWindow):
 
         self._restore_window_geometry()
 
-        self.render_tasks()
+        QTimer.singleShot(0, self.render_tasks)
 
     def _check_and_prompt_update(self):
         def _check():
@@ -1616,7 +1616,9 @@ class MainWindow(QMainWindow):
             self.app_state["pinnedToDesktop"] = False
         reconcile_layer_settings(self.app_state)
         self.state_manager.save()
+        geo = self.saveGeometry()
         self.apply_settings()
+        self.restoreGeometry(geo)
 
     def toggle_pinned_to_desktop(self):
         self.app_state = self.state_manager.state
@@ -1625,7 +1627,9 @@ class MainWindow(QMainWindow):
             self.app_state["alwaysOnTop"] = False
         reconcile_layer_settings(self.app_state)
         self.state_manager.save()
+        geo = self.saveGeometry()
         self.apply_settings()
+        self.restoreGeometry(geo)
 
     def _toggle_pin_to_desktop_from_menu(self, checked: bool):
         self.app_state = self.state_manager.state
@@ -1634,7 +1638,9 @@ class MainWindow(QMainWindow):
             self.app_state["alwaysOnTop"] = False
         reconcile_layer_settings(self.app_state)
         self.state_manager.save()
+        geo = self.saveGeometry()
         self.apply_settings()
+        self.restoreGeometry(geo)
 
     def _toggle_always_on_top_via_shortcut(self):
         current = self.app_state.get("alwaysOnTop", False)
