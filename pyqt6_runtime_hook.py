@@ -11,9 +11,11 @@ Without this, you can hit one of:
   * qt.qpa.plugin: Could not find the Qt platform plugin "windows" in ""
   * Missing Qt6Core.dll, Qt6Gui.dll, etc. at app startup
 
-The hook adjusts:
-  * PATH         — so Qt6Core.dll, MSVCP140.dll, VCRUNTIME140.dll, etc. resolve
-  * QT_PLUGIN_PATH, QT_QPA_PLATFORM_PLUGIN_PATH — so Qt can find its plugins
+The hook uses os.add_dll_directory() (Python 3.8+ on Windows) to
+register the Qt6 binary directory and the bundle root directory with
+the Windows loader's secure DLL search set. Just modifying os.environ
+['PATH'] does NOT work because modern Python uses LOAD_LIBRARY_SEARCH_
+DEFAULT_DIRS which ignores PATH.
 """
 
 import os
@@ -27,32 +29,34 @@ def _meipass() -> str:
 
 bundle = _meipass()
 
-# Make sure the `PyQt6.sip` namespace module is importable. In
-# PyQt6 >= 6.6.1 the `.pyd` is shipped by the `pyqt6-sip` wheel
-# which installs it into the `PyQt6/` directory. Doing the import
-# here at hook time surfaces any "module not found" error to the
-# usual Python traceback rather than a generic PyInstaller error
-# dialog later.
-try:
-    import PyQt6.sip  # noqa: F401
-except Exception:
-    pass
+# ── 1. Register the bundle root (_internal) so that VC++ runtime      ──
+#    DLLs (VCRUNTIME140.dll, MSVCP140.dll) resolve from there.
+if os.path.isdir(bundle):
+    try:
+        os.add_dll_directory(bundle)
+    except OSError:
+        pass
 
-# PyInstaller's onedir layout puts the Qt runtime at:
-#   <bundle>/_internal/PyQt6/Qt6/bin
-#   <bundle>/_internal/PyQt6/Qt6/plugins
-#   <bundle>/_internal/PyQt6/Qt6/plugins/platforms
+# ── 2. Register the Qt6 binary directory so that Qt6Core.dll,        ──
+#    Qt6Gui.dll, Qt6Widgets.dll and their VC++ deps resolve when
+#    PyQt6's .pyd files import them.
 qt_bin = os.path.join(bundle, "PyQt6", "Qt6", "bin")
 qt_plugins = os.path.join(bundle, "PyQt6", "Qt6", "plugins")
 qt_platforms = os.path.join(qt_plugins, "platforms")
 
-# Prepend Qt's bin directory to PATH so its DLLs resolve via the standard
-# loader search order when PyQt6.QtCore etc. are imported.
+if os.path.isdir(qt_bin):
+    try:
+        os.add_dll_directory(qt_bin)
+    except OSError:
+        pass
+
+# ── 3. Fallback: also prepend to PATH (older Python / homebrew Qt). ──
 if os.path.isdir(qt_bin):
     os.environ["PATH"] = qt_bin + os.pathsep + os.environ.get("PATH", "")
+if os.path.isdir(bundle):
+    os.environ["PATH"] = bundle + os.pathsep + os.environ.get("PATH", "")
 
-# Tell Qt where to find its plugins (and especially the windows platform
-# plugin). Setting both names is harmless and covers Qt 5/6 differences.
+# ── 4. Tell Qt where to find its platform plugins.                  ──
 if os.path.isdir(qt_plugins):
     os.environ["QT_PLUGIN_PATH"] = qt_plugins
 if os.path.isdir(qt_platforms):

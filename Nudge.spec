@@ -1,5 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 # `PyQt6.sip` is a namespace module that, in PyQt6 >= 6.6.1, is
@@ -17,6 +22,42 @@ pyqt6sip_datas, pyqt6sip_binaries, pyqt6sip_hiddenimports = collect_all("pyqt6-s
 
 # `PyQt6` proper — every Qt submodule, Qt6 binary, and data file.
 pyqt6_datas, pyqt6_binaries, pyqt6_hiddenimports = collect_all("PyQt6")
+
+# --- Critical Qt6 DLLs: ALSO deploy them right next to the .pyd files ---
+# collect_all("PyQt6") puts the Qt6 DLLs inside _internal/PyQt6/Qt6/bin/.
+# But Python 3.8+ on Windows uses LOAD_LIBRARY_SEARCH_DEFAULT_DIRS which
+# only searches the .pyd's own directory, system32, and directories
+# registered via os.add_dll_directory(). PATH is ignored.
+#
+# The runtime hook (pyqt6_runtime_hook.py) calls os.add_dll_directory()
+# for Qt6/bin, but to be absolutely sure we also make a direct copy of
+# the essential DLLs right next to QtCore.pyd/QtGui.pyd/QtWidgets.pyd,
+# so the OS-level loader finds them naturally without ANY path fix.
+import importlib.util
+_pyqt6_spec = importlib.util.find_spec("PyQt6")
+if _pyqt6_spec is not None and _pyqt6_spec.origin is not None:
+    _qt6_bin_dir = Path(_pyqt6_spec.origin).parent / "Qt6" / "bin"
+    _ESSENTIAL_QT_DLLS: tuple[str, ...] = (
+        "Qt6Core.dll",
+        "Qt6Gui.dll",
+        "Qt6Widgets.dll",
+        "Qt6Network.dll",
+        "Qt6Svg.dll",
+        "VCRUNTIME140.dll",
+        "VCRUNTIME140_1.dll",
+        "MSVCP140.dll",
+        "MSVCP140_1.dll",
+        "MSVCP140_2.dll",
+        "concrt140.dll",
+    )
+    for _dll_name in _ESSENTIAL_QT_DLLS:
+        _src = _qt6_bin_dir / _dll_name
+        if _src.is_file():
+            # PyInstaller binary TOC entries are 2-tuples:
+            #   (absolute_source_path, relative_dest_dir)
+            # This places the DLL at _internal/PyQt6/<dll_name>
+            # — right next to QtCore.pyd, QtGui.pyd etc.
+            pyqt6_binaries.append((os.fspath(_src), "PyQt6"))
 
 # Submodules the app code statically references. `collect_all` already
 # returns the visible submodules; this list covers the commonly missed

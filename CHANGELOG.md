@@ -5,6 +5,24 @@ All notable changes to Nudge are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-06-06
+
+### Fixed
+- **`DLL load failed while importing QtCore: The specified procedure
+  could not be found`** — persisted through v1.0.2–v1.0.3 despite the
+  runtime hook. Two root causes:
+  1. **`os.environ["PATH"]` is ignored by modern Python (3.8+) on
+     Windows** — `LOAD_LIBRARY_SEARCH_DEFAULT_DIRS` is used to load
+     `.pyd` files and PATH is not part of the secure DLL set. Replaced
+     with `os.add_dll_directory()` which registers the Qt6/bin
+     directory AND the bundle root directory via `AddDllDirectory`.
+  2. **Qt6 DLLs live in `PyQt6/Qt6/bin/`, `.pyd` files live in
+     `PyQt6/`** — these aren't on each other's loader search path.
+     The spec now also copies the 11 essential DLLs (`Qt6Core.dll`,
+     `Qt6Gui.dll`, `Qt6Widgets.dll`, `Qt6Network.dll`, `Qt6Svg.dll`,
+     plus the VC++ runtime) into `_internal/PyQt6/` right next to the
+     `.pyd` files, so the OS-level loader finds them naturally.
+
 ## [1.0.3] - 2026-06-06
 
 ### Fixed
