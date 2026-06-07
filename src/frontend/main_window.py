@@ -1332,6 +1332,7 @@ class SettingsDialog(QDialog):
         self.state_manager.save()
         self._saved_snapshot = self._build_snapshot()
         self._has_unsaved_changes = False
+        self._initial_theme = normalize_theme_id(self.state_manager.state.get("theme", "dark"))
 
         if parent is not None and hasattr(parent, "task_row_widgets"):
             groups_changed = self.groups_enabled_cb.isChecked() != old_groups_enabled
@@ -1599,6 +1600,9 @@ class MainWindow(QMainWindow):
         for b in (self.btn_menu, self.btn_settings, self.btn_minimize, self.btn_exit):
             b.setStyleSheet("")
         refresh_glass_shells(self, theme_id)
+        for w in app.topLevelWidgets():
+            if w is not self and w.isVisible():
+                refresh_glass_shells(w, theme_id)
         if hasattr(self, "_tray"):
             self._tray.restyle(theme)
 
