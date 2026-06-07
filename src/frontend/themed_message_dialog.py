@@ -64,14 +64,14 @@ class ThemedMessageDialog(QDialog):
         layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(12)
 
-        title_label = QLabel(title)
-        title_label.setStyleSheet("font-weight: bold;")
-        layout.addWidget(title_label)
+        self._title_label = QLabel(title)
+        self._title_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(self._title_label)
 
-        msg_label = QLabel(message)
-        msg_label.setWordWrap(True)
-        msg_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        layout.addWidget(msg_label, 1)
+        self._msg_label = QLabel(message)
+        self._msg_label.setWordWrap(True)
+        self._msg_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(self._msg_label, 1)
 
         button_row = QHBoxLayout()
         button_row.setSpacing(8)
@@ -97,18 +97,32 @@ class ThemedMessageDialog(QDialog):
         self._update_overlap_opacity()
 
     def _size_to_content(self) -> None:
-        margins = self.bg_frame.layout().contentsMargins()
-        h_margin = margins.left() + margins.right()
-        # Measure the longest text line to pick a width that avoids clipping.
+        m = self.bg_frame.layout().contentsMargins()
+        sp = self.bg_frame.layout().spacing()
+
+        # Measure the longest text line to pick a width that doesn't clip.
         longest = 0
-        for label in self.findChildren(QLabel):
+        for label in (self._title_label, self._msg_label):
             fm = QFontMetrics(label.font())
             for line in label.text().split("\n"):
                 longest = max(longest, fm.horizontalAdvance(line))
-        target_w = max(360, int(longest + h_margin + 4))
-        self.resize(target_w, 160)
-        # Let height follow wrapped content
-        self.adjustSize()
+        available_w = max(320, longest + m.left() + m.right() + 40)
+        self.resize(available_w, 160)
+
+        text_w = available_w - m.left() - m.right()
+
+        # Title height
+        title_h = self._title_label.sizeHint().height()
+
+        # Message height wrapped to text_w
+        fm = QFontMetrics(self._msg_label.font())
+        bounds = fm.boundingRect(0, 0, text_w, 10000, int(Qt.TextFlag.TextWordWrap), self._msg_label.text())
+
+        # Buttons height
+        btn_h = 32
+
+        total_h = m.top() + title_h + sp + bounds.height() + 8 + sp + btn_h + m.bottom()
+        self.resize(available_w, total_h)
 
     def resizeEvent(self, event):
         self.bg_frame.setGeometry(self.rect())
