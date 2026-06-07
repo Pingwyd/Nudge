@@ -66,6 +66,8 @@ pyqt6_extra_hidden = collect_submodules("PyQt6")
 # native bits are bundled too.
 winotify_datas, winotify_binaries, winotify_hiddenimports = collect_all("winotify")
 
+certifi_datas, certifi_binaries, certifi_hiddenimports = collect_all("certifi")
+
 # Qt subsystems Nudge does NOT use. Excluding them keeps the bundle
 # smaller and silences "Library not found" warnings for unrelated Qt
 # plugins (Qt3D, QML compiler, designer translations, etc.).
@@ -127,7 +129,7 @@ a = Analysis(
     # Data files (appstate.json, tasks.json, groups.json, history.json) live
     # under %APPDATA%\Nudge\ at runtime — they are NOT bundled with the EXE.
     # Only static assets (icon) are included here.
-    datas=[('icon.ico', '.')] + pyqt6_datas + pyqt6sip_datas + winotify_datas,
+    datas=[('icon.ico', '.')] + pyqt6_datas + pyqt6sip_datas + winotify_datas + certifi_datas,
     hiddenimports=[
         # SIP runtime — PyQt6's generated bindings import PyQt6.sip at
         # module load time. Must come first.
@@ -140,7 +142,8 @@ a = Analysis(
     + pyqt6_extra_hidden
     + pyqt6_hiddenimports
     + pyqt6sip_hiddenimports
-    + winotify_hiddenimports,
+    + winotify_hiddenimports
+    + certifi_hiddenimports,
     hookspath=[],
     hooksconfig={},
     # The runtime hook sets up Qt library / plugin paths before PyQt6

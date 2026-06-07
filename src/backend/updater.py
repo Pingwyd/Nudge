@@ -63,7 +63,17 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
     "1.2.2": (
         "\ud83d\udc1b Bug Fixes\n"
         "  \u2022 Fixed theme not applying to all windows when switching back to the original theme\n"
-        "  \u2022 Theme now updates instantly across all open dialogs"
+        "  \u2022 Theme now updates instantly across all open dialogs\n"
+        "\n"
+        "\ud83d\udce6 Improvements\n"
+        "  \u2022 Glass-themed download dialog with progress bar\n"
+        "  \u2022 Threaded download (menus no longer freeze during updates)\n"
+        "  \u2022 Download speed boosted with 64KB chunks"
+    ),
+    "1.2.3": (
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Fixed update checker failing with SSL certificate errors\n"
+        "  \u2022 Better diagnostic logging for update check failures"
     ),
 }
 
@@ -98,10 +108,18 @@ def check_for_update(
 ) -> Optional[UpdateCheckResult]:
     url = check_url or DEFAULT_CHECK_URL
     try:
+        import ssl as _ssl
+        try:
+            import certifi as _certifi
+            ctx = _ssl.create_default_context(cafile=_certifi.where())
+        except Exception:
+            ctx = _ssl.create_default_context()
         req = Request(url, headers={"Accept": "application/json", "User-Agent": "Nudge/1.0"})
-        with urlopen(req, timeout=timeout) as resp:
+        with urlopen(req, timeout=timeout, context=ctx) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-    except (URLError, HTTPError, OSError, json.JSONDecodeError):
+    except Exception as exc:
+        import sys
+        print(f"[Nudge] Update check failed: {type(exc).__name__}: {exc}", file=sys.stderr)
         return None
 
     tag = data.get("tag_name", "")

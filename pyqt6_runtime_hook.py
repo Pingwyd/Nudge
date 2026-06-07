@@ -61,3 +61,13 @@ if os.path.isdir(qt_plugins):
     os.environ["QT_PLUGIN_PATH"] = qt_plugins
 if os.path.isdir(qt_platforms):
     os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = qt_platforms
+
+# ── 5. SSL certificates — point Python's ssl module at certifi's    ──
+#    bundled CA store so HTTPS requests work in the frozen EXE.      ──
+try:
+    import certifi as _certifi
+    _ca_file = _certifi.where()
+    if _ca_file and os.path.isfile(_ca_file):
+        os.environ.setdefault("SSL_CERT_FILE", _ca_file)
+except Exception:
+    pass
