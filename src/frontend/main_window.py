@@ -36,7 +36,7 @@ from PyQt6.QtGui import (
     QShortcut,
     QDrag,
 )
-from PyQt6.QtCore import Qt, QRect, QEvent, QSize, QTimer, QPoint, QByteArray, QMimeData, QUrl
+from PyQt6.QtCore import Qt, QRect, QEvent, QSize, QTimer, QPoint, QByteArray, QMimeData, QUrl, pyqtSignal
 from PyQt6.QtGui import (
     QAction,
     QCursor,
@@ -1065,6 +1065,12 @@ class SettingsDialog(QDialog):
         self.tutorial_btn.clicked.connect(self._open_tutorial)
         advanced_layout.addWidget(self.tutorial_btn)
 
+        support_btn = QPushButton("\u2764\ufe0f Support Development")
+        support_btn.setObjectName("primaryButton")
+        support_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        support_btn.clicked.connect(self._open_support_from_settings)
+        advanced_layout.addWidget(support_btn)
+
         # ── Sidebar layout: buttons on the left, stacked content on the right ──
         content_row = QHBoxLayout()
         content_row.setSpacing(8)
@@ -1187,6 +1193,11 @@ class SettingsDialog(QDialog):
         parent = self.parent()
         if parent is not None and hasattr(parent, "_show_tutorial"):
             parent._show_tutorial()
+
+    def _open_support_from_settings(self):
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "_open_support_dialog"):
+            parent._open_support_dialog()
 
     def _on_export_all_groups_toggled(self, checked):
         self._export_group_bulk_update = True
@@ -1389,6 +1400,8 @@ class SettingsDialog(QDialog):
         self.reject()
 
 class MainWindow(QMainWindow):
+    _update_check_done = pyqtSignal(object)
+
     def __init__(self):
         super().__init__()
         
@@ -1450,6 +1463,9 @@ class MainWindow(QMainWindow):
         # Apply visual and functional settings from state
         self.apply_settings()
 
+        # Thread-safe update check result handler
+        self._update_check_done.connect(self._on_update_check_done)
+
         # Boot-time update check (deferred 3s so UI can finish rendering first)
         if self.app_state.get("checkForUpdates", True):
             QTimer.singleShot(3000, self._check_and_prompt_update)
@@ -1459,6 +1475,8 @@ class MainWindow(QMainWindow):
         self._tray = SystemTrayManager(QApplication.instance(), get_app_icon(), self)
         self._tray.show_requested.connect(self._show_from_tray)
         self._tray.quit_requested.connect(self._quit_from_tray)
+        self._tray.settings_requested.connect(self.open_settings)
+        self._tray.update_requested.connect(self._check_and_prompt_update)
 
         # First-launch tutorial
         if not self.app_state.get("seenTutorial"):
@@ -1527,6 +1545,8 @@ class MainWindow(QMainWindow):
             if getattr(self, '_skip_close_confirm', False):
                 self._tray.hide()
                 super().closeEvent(event)
+                from PyQt6.QtWidgets import QApplication
+                QApplication.instance().quit()
                 return
             reply = QMessageBox.question(
                 self,
@@ -1538,6 +1558,8 @@ class MainWindow(QMainWindow):
             if reply == QMessageBox.StandardButton.Yes:
                 self._tray.hide()
                 super().closeEvent(event)
+                from PyQt6.QtWidgets import QApplication
+                QApplication.instance().quit()
             else:
                 event.ignore()
                 self._force_quit = False
@@ -1607,18 +1629,19 @@ class MainWindow(QMainWindow):
     def _check_and_prompt_update(self):
         def _check():
             result = check_for_update(__version__)
-            if result is None:
-                QTimer.singleShot(0, lambda: ThemedMessageDialog.information(self, "Update Check", "Could not check for updates. Check your internet connection."))
-                return
-            if result.available:
-                QTimer.singleShot(0, lambda: self._show_update_dialog(result))
-            else:
-                QTimer.singleShot(0, lambda: ThemedMessageDialog.information(self, "Update Check", "You\u2019re up to date!"))
+            self._update_check_done.emit(result)
         t = threading.Thread(target=_check, daemon=True)
         t.start()
 
+    def _on_update_check_done(self, result):
+        if result is None:
+            ThemedMessageDialog.information(self, "Update Check", "Could not check for updates. Check your internet connection.")
+        elif result.available:
+            self._show_update_dialog(result)
+        else:
+            ThemedMessageDialog.information(self, "Update Check", "You\u2019re up to date!")
+
     def _show_update_dialog(self, result: UpdateCheckResult):
-        self.btn_update.setEnabled(True)
         friendly, _ = parse_changelog(result.changelog, result.latest_version)
         self.app_state["lastChangelog"] = friendly
         self.state_manager.save()

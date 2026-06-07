@@ -1,6 +1,6 @@
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtWidgets import QDialog, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+from PyQt6.QtWidgets import QDialog, QFrame, QLabel, QPushButton, QVBoxLayout
 from src.frontend.theme import get_theme, normalize_theme_id, refresh_glass_shells
 from src import __app_name__, __version__
 
@@ -14,20 +14,20 @@ class SupportDialog(QDialog):
 
     def _init_ui(self):
         self.setWindowTitle(f"Support {__app_name__}")
-        self.resize(360, 300)
-        self.setMinimumSize(300, 260)
+        self.resize(340, 260)
+        self.setMinimumSize(280, 220)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         self.frame = QFrame(self)
         self.frame.setObjectName("glassPanel")
-        self.frame.setGeometry(0, 0, 360, 300)
+        self.frame.setGeometry(0, 0, 340, 260)
 
         layout = QVBoxLayout(self.frame)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(12)
 
-        title = QLabel(f"\u2615 Support {__app_name__}")
+        title = QLabel(f"\u2764\ufe0f Support {__app_name__}")
         font = title.font()
         font.setPointSize(18)
         font.setBold(True)
@@ -45,17 +45,11 @@ class SupportDialog(QDialog):
 
         layout.addStretch()
 
-        coffee_btn = QPushButton("\u2615 Buy Me a Coffee")
-        coffee_btn.setObjectName("primaryButton")
-        coffee_btn.setMinimumHeight(40)
-        coffee_btn.clicked.connect(self._open_coffee_link)
-        layout.addWidget(coffee_btn)
-
-        github_btn = QPushButton("\u2b50 Sponsor on GitHub")
-        github_btn.setObjectName("ghostButton")
-        github_btn.setMinimumHeight(36)
-        github_btn.clicked.connect(self._open_github_sponsor)
-        layout.addWidget(github_btn)
+        donate_btn = QPushButton("\u2615 Buy Me a Coffee")
+        donate_btn.setObjectName("primaryButton")
+        donate_btn.setMinimumHeight(40)
+        donate_btn.clicked.connect(self._open_donate_link)
+        layout.addWidget(donate_btn)
 
         close_btn = QPushButton("Close")
         close_btn.setObjectName("primaryButton")
@@ -64,11 +58,8 @@ class SupportDialog(QDialog):
 
         self._update_overlap_opacity()
 
-    def _open_coffee_link(self):
-        QDesktopServices.openUrl(QUrl("https://buymeacoffee.com/yourusername"))
-
-    def _open_github_sponsor(self):
-        QDesktopServices.openUrl(QUrl("https://github.com/sponsors/yourusername"))
+    def _open_donate_link(self):
+        QDesktopServices.openUrl(QUrl("https://flutterwave.com/pay/nudge"))
 
     def _update_overlap_opacity(self):
         parent = self.parent()
