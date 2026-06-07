@@ -1332,7 +1332,6 @@ class SettingsDialog(QDialog):
         self.state_manager.save()
         self._saved_snapshot = self._build_snapshot()
         self._has_unsaved_changes = False
-        self._initial_theme = normalize_theme_id(self.state_manager.state.get("theme", "dark"))
 
         if parent is not None and hasattr(parent, "task_row_widgets"):
             groups_changed = self.groups_enabled_cb.isChecked() != old_groups_enabled
@@ -1354,6 +1353,7 @@ class SettingsDialog(QDialog):
                 parent._sync_task_row_text_layouts()
             parent.setUpdatesEnabled(True)
             parent.update()
+            self._initial_theme = normalize_theme_id(self.state_manager.state.get("theme", "dark"))
 
         refresh_glass_shells(
             self,
