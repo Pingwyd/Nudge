@@ -60,6 +60,11 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
         "  \u2022 Fixed dark theme not applying to History, Settings, Export panels\n"
         "  \u2022 Fixed three-column collapse at minimum window width"
     ),
+    "1.2.2": (
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Fixed theme not applying to all windows when switching back to the original theme\n"
+        "  \u2022 Theme now updates instantly across all open dialogs"
+    ),
 }
 
 
