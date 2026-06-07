@@ -24,19 +24,52 @@ class UpdateCheckResult:
 
 
 FRIENDLY_CHANGELOGS: dict[str, str] = {
-    "1.1.0": "Auto-update, system tray, and critical bug fixes. Nudge can now update itself and minimizes to tray instead of closing.",
-    "1.2.0": "Tutorial refresh, What\u2019s New popup, Buy Me a Coffee support button, and user-friendly changelog display.",
-    "1.2.1": "Render performance boost, memory leak fixes, smaller build size, and end-to-end verification bundle.",
+    "1.1.0": (
+        "\u2728 New Features\n"
+        "  \u2022 Auto-update: Nudge now checks for updates on launch\n"
+        "  \u2022 System tray: app minimizes to tray instead of closing\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Fixed crash when adding tasks at minimum window width\n"
+        "  \u2022 Fixed text clipping behind the Edit button\n"
+        "  \u2022 Dark theme now applies consistently across all UI elements"
+    ),
+    "1.2.0": (
+        "\u2728 New Features\n"
+        "  \u2022 Tutorial dialog on first launch\n"
+        "  \u2022 What\u2019s New popup after each update\n"
+        "  \u2022 Support dialog with Donate button (Flutterwave)\n"
+        "  \u2022 User-friendly changelog display in update dialogs\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Removed checkboxes from task rows (click text to complete)\n"
+        "  \u2022 Min-width text column now spans full window width\n"
+        "  \u2022 Close confirmation dialog for tray quit\n"
+        "  \u2022 Overflow menu (\u00b7\u00b7\u00b7) replaces chrome buttons for cleaner title bar"
+    ),
+    "1.2.1": (
+        "\ud83d\udcc8 Improvements\n"
+        "  \u2022 Render performance: batched UI updates, debounced resize\n"
+        "  \u2022 Build size reduced by excluding unused Qt modules\n"
+        "  \u2022 Memory leak fixes: timer cleanup, forced GC after render\n"
+        "  \u2022 End-to-end verification bundle for all phases\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Fixed text size not applying to newly added tasks\n"
+        "  \u2022 Fixed Always on Top / Pin to Desktop text loss on toggle\n"
+        "  \u2022 Fixed dark theme not applying to History, Settings, Export panels\n"
+        "  \u2022 Fixed three-column collapse at minimum window width"
+    ),
 }
 
 
 def parse_changelog(release_body: str, version: str = "") -> tuple[str, str]:
     """Return (friendly_version, full_changelog) split on ---."""
+    if version in FRIENDLY_CHANGELOGS:
+        return FRIENDLY_CHANGELOGS[version], release_body.strip()
     if "---" in release_body:
         parts = release_body.split("---", 1)
         return parts[0].strip(), parts[1].strip()
-    if version in FRIENDLY_CHANGELOGS:
-        return FRIENDLY_CHANGELOGS[version], release_body.strip()
     return release_body.strip(), release_body.strip()
 
 
