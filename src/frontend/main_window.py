@@ -66,7 +66,7 @@ from src.backend.task_groups import (
     tasks_for_group,
 )
 from src.backend.window_layer import compose_main_window_flags, reconcile_layer_settings
-from src.backend.updater import check_for_update, perform_update, parse_changelog, UpdateCheckResult
+from src.backend.updater import check_for_update, parse_changelog, UpdateCheckResult
 from src import __version__
 from src.frontend.update_dialog import UpdateInfoDialog
 from src.frontend.history_row import HistoryRowWidget
@@ -1658,22 +1658,12 @@ class MainWindow(QMainWindow):
             self._apply_update(result.download_url, result.latest_version)
 
     def _apply_update(self, download_url: str, version: str):
-        from PyQt6.QtWidgets import QMessageBox, QApplication
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Downloading Update")
-        msg.setText(f"Downloading Nudge v{version}…")
-        msg.setStandardButtons(QMessageBox.StandardButton.NoButton)
-        msg.setModal(True)
-        msg.show()
-        QApplication.processEvents()
-        success = perform_update(download_url, version)
-        msg.close()
-        if success:
-            self._skip_close_confirm = True
-            self.close()
-        else:
-            from src.frontend.themed_message_dialog import ThemedMessageDialog
-            ThemedMessageDialog.warning(self, "Download Failed", "Could not download the update. Please try again later.")
+        from src.frontend.update_dialog import DownloadDialog
+        dialog = DownloadDialog(version, download_url, self)
+        avoid = self._window_rects_to_avoid()
+        self._place_dialog_avoiding_rects(dialog, avoid)
+        dialog.start_download()
+        dialog.exec()
 
     def _apply_window_layer(self):
         """Apply window layer (AoT / Pin to Desktop) without rebuilding task list."""

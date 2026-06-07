@@ -143,7 +143,7 @@ def download_update(
             downloaded = 0
             with open(dest_path, "wb") as f:
                 while True:
-                    chunk = resp.read(8192)
+                    chunk = resp.read(65536)
                     if not chunk:
                         break
                     f.write(chunk)
