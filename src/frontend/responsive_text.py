@@ -13,7 +13,7 @@ from PyQt6.QtGui import QFontMetrics, QTextOption
 from PyQt6.QtWidgets import QLabel, QLineEdit, QSizePolicy, QStackedWidget, QWidget
 
 # Avoid a single ultra-narrow text column when the window is at minimum width.
-MIN_TEXT_COLUMN_WIDTH = 120
+MIN_TEXT_COLUMN_WIDTH = 180
 
 
 def configure_wrapping_label(label: QLabel) -> None:
@@ -29,7 +29,9 @@ def apply_wrapped_text_width(label: QLabel, available_width: int) -> None:
     """Set width constraints so wrap reflows; prefer at least MIN_TEXT_COLUMN_WIDTH when possible."""
     width = max(1, available_width)
     label.setMaximumWidth(width)
-    label.setMinimumWidth(min(width, MIN_TEXT_COLUMN_WIDTH))
+    min_width = min(width, int(available_width * 0.4))
+    min_width = max(min_width, MIN_TEXT_COLUMN_WIDTH)
+    label.setMinimumWidth(min_width)
     label.adjustSize()
 
 

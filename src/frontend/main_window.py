@@ -1858,7 +1858,9 @@ class MainWindow(QMainWindow):
             return
         viewport_w = self.scroll_area.viewport().width()
         if viewport_w > 0:
-            self.tasks_widget.setMinimumWidth(viewport_w)
+            sb = self.scroll_area.verticalScrollBar()
+            scrollbar_w = sb.width() if sb.isVisible() else 0
+            self.tasks_widget.setMinimumWidth(viewport_w - scrollbar_w)
 
     def _sync_task_row_text_layouts(self):
         for row in self.task_row_widgets.values():
