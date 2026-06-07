@@ -9,7 +9,6 @@ import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
-from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
 DEFAULT_CHECK_URL = "https://api.github.com/repos/Pingwyd/Nudge/releases/latest"
@@ -27,15 +26,71 @@ def _get_ssl_context():
     global _ssl_context
     if _ssl_context is not None:
         return _ssl_context
-    import ssl
     try:
-        import certifi
-        _ssl_context = ssl.create_default_context(cafile=certifi.where())
-        logging.debug("SSL context using certifi CA: %s", certifi.where())
+        import ssl
+        try:
+            import certifi
+            _ssl_context = ssl.create_default_context(cafile=certifi.where())
+            logging.debug("SSL context using certifi CA: %s", certifi.where())
+        except Exception:
+            _ssl_context = ssl.create_default_context()
+            logging.debug("SSL context using system default CA store")
     except Exception:
-        _ssl_context = ssl.create_default_context()
-        logging.debug("SSL context using system default CA store")
+        _ssl_context = None
     return _ssl_context
+
+def _fetch_url(url, headers, timeout=10):
+    """Fetch a URL, returning response bytes.
+
+    Uses Python's ssl/urllib when available; falls back to PowerShell
+    Invoke-WebRequest when the _ssl C extension DLL cannot load in a
+    frozen PyInstaller EXE.
+    """
+    ctx = _get_ssl_context()
+    if ctx is not None:
+        from urllib.request import Request, urlopen
+        req = Request(url, headers=headers)
+        with urlopen(req, timeout=timeout, context=ctx) as resp:
+            return resp.read()
+    return _ps_fetch(url, headers, timeout)
+
+def _ps_fetch(url, headers, timeout):
+    """Fallback HTTPS GET via PowerShell — bypasses Python's _ssl DLL entirely."""
+    hdr = "@{" + ";".join(f'"{k}"="{v}"' for k, v in headers.items()) + "}"
+    ps = (
+        "$r = Invoke-WebRequest -Uri '{}' -Headers {} -TimeoutSec {} -UseBasicParsing;"
+        "[System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8;"
+        "$r.Content"
+    ).format(url.replace("'", "''"), hdr, timeout)
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", ps],
+        capture_output=True, timeout=timeout + 5,
+    )
+    if result.returncode != 0:
+        err = result.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(err or "PowerShell request failed")
+    out = result.stdout
+    # Strip UTF-8 BOM if present
+    if out[:3] == b"\xef\xbb\xbf":
+        out = out[3:]
+    return out
+
+
+def _ps_download(url, dest_path, timeout=120):
+    """Fallback file download via PowerShell when Python's _ssl DLL is broken."""
+    ps = (
+        "$r = Invoke-WebRequest -Uri '{}' -Headers @{{\"User-Agent\"=\"Nudge/1.0\"}} "
+        "-TimeoutSec {} -OutFile '{}' -UseBasicParsing"
+    ).format(url.replace("'", "''"), timeout, str(dest_path).replace("'", "''"))
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", ps],
+        capture_output=True, timeout=timeout + 30,
+    )
+    if result.returncode != 0:
+        err = result.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(err or "PowerShell download failed")
+    if not dest_path.exists():
+        raise RuntimeError("PowerShell download created no output file")
 
 
 @dataclass
@@ -141,9 +196,8 @@ def check_for_update(
 ) -> Optional[UpdateCheckResult]:
     url = check_url or DEFAULT_CHECK_URL
     try:
-        req = Request(url, headers={"Accept": "application/json", "User-Agent": "Nudge/1.0"})
-        with urlopen(req, timeout=timeout, context=_get_ssl_context()) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+        body = _fetch_url(url, {"Accept": "application/json", "User-Agent": "Nudge/1.0"}, timeout)
+        data = json.loads(body.decode("utf-8"))
     except Exception as exc:
         logging.error("Update check failed: %s: %s", type(exc).__name__, exc)
         return UpdateCheckResult(error=f"{type(exc).__name__}: {exc}")
@@ -185,23 +239,35 @@ def download_update(
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_path = dest_dir / f"Nudge_{latest_version}.exe"
 
+    ctx = _get_ssl_context()
+    if ctx is not None:
+        try:
+            from urllib.request import Request, urlopen
+            req = Request(download_url, headers={"User-Agent": "Nudge/1.0"})
+            with urlopen(req, timeout=60, context=ctx) as resp:
+                total = int(resp.headers.get("Content-Length", 0))
+                downloaded = 0
+                with open(dest_path, "wb") as f:
+                    while True:
+                        chunk = resp.read(65536)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if progress_callback and total:
+                            progress_callback(downloaded, total)
+            return dest_path
+        except (URLError, HTTPError, OSError) as exc:
+            logging.error("Download failed: %s: %s", type(exc).__name__, exc)
+            if dest_path.exists():
+                dest_path.unlink()
+            return None
+    # Fallback via PowerShell when _ssl DLL is broken
     try:
-        req = Request(download_url, headers={"User-Agent": "Nudge/1.0"})
-        with urlopen(req, timeout=60, context=_get_ssl_context()) as resp:
-            total = int(resp.headers.get("Content-Length", 0))
-            downloaded = 0
-            with open(dest_path, "wb") as f:
-                while True:
-                    chunk = resp.read(65536)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if progress_callback and total:
-                        progress_callback(downloaded, total)
+        _ps_download(download_url, dest_path, timeout=120)
         return dest_path
-    except (URLError, HTTPError, OSError) as exc:
-        logging.error("Download failed: %s: %s", type(exc).__name__, exc)
+    except Exception as exc:
+        logging.error("PowerShell download failed: %s: %s", type(exc).__name__, exc)
         if dest_path.exists():
             dest_path.unlink()
         return None
