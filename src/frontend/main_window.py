@@ -1651,7 +1651,7 @@ class MainWindow(QMainWindow):
         friendly, _ = parse_changelog(result.changelog, result.latest_version)
         self.app_state["lastChangelog"] = friendly
         self.state_manager.save()
-        dialog = UpdateInfoDialog(result.latest_version, result.changelog, result.download_url, self)
+        dialog = UpdateInfoDialog(result.latest_version, friendly, result.download_url, self)
         avoid = self._window_rects_to_avoid()
         self._place_dialog_avoiding_rects(dialog, avoid)
         if dialog.exec() == QDialog.DialogCode.Accepted:
