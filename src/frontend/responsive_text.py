@@ -13,7 +13,9 @@ from PyQt6.QtGui import QFontMetrics, QTextOption
 from PyQt6.QtWidgets import QLabel, QLineEdit, QSizePolicy, QStackedWidget, QWidget
 
 # Avoid a single ultra-narrow text column when the window is at minimum width.
-MIN_TEXT_COLUMN_WIDTH = 180
+def min_text_column_width(available_width: int) -> int:
+    """At least 40% of available width, never below 100px."""
+    return max(100, int(available_width * 0.4))
 
 
 def configure_wrapping_label(label: QLabel) -> None:
@@ -26,11 +28,11 @@ def configure_wrapping_label(label: QLabel) -> None:
 
 
 def apply_wrapped_text_width(label: QLabel, available_width: int) -> None:
-    """Set width constraints so wrap reflows; prefer at least MIN_TEXT_COLUMN_WIDTH when possible."""
+    """Set width constraints so wrap reflows; prefer at least 40% of available width when possible."""
     width = max(1, available_width)
     label.setMaximumWidth(width)
     min_width = min(width, int(available_width * 0.4))
-    min_width = max(min_width, MIN_TEXT_COLUMN_WIDTH)
+    min_width = max(min_width, min_text_column_width(available_width))
     label.setMinimumWidth(min_width)
     label.adjustSize()
 
@@ -95,7 +97,7 @@ def available_text_width(host: QWidget, reserved: Iterable[QWidget]) -> int:
     if widget_count > 1:
         available -= layout.spacing() * (widget_count - 1)
 
-    return max(MIN_TEXT_COLUMN_WIDTH, available)
+    return max(min_text_column_width(available), available)
 
 
 class ResponsiveTextRowHelper:

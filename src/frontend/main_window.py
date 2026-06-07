@@ -258,7 +258,7 @@ class TaskRowWidget(QWidget):
         self.edit_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.edit_btn.setStyleSheet("font-size: 12px; padding: 3px 10px; min-height: 0;")
         self.edit_btn.clicked.connect(self.toggle_edit_mode)
-        layout.addWidget(self.edit_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.edit_btn, 0, Qt.AlignmentFlag.AlignBottom)
 
         reserved = [self.edit_btn]
         if self._indent_spacer is not None:
@@ -294,7 +294,7 @@ class TaskRowWidget(QWidget):
         self._sync_content_stack_height()
 
     def _sync_content_stack_height(self):
-        """Stage 4: stack height tracks only the visible page (label or single-line editor)."""
+        """Content stack height accounts for full wrapped text height."""
         ht_reserved = [self.edit_btn]
         if self._indent_spacer is not None:
             ht_reserved.insert(0, self._indent_spacer)
@@ -304,10 +304,8 @@ class TaskRowWidget(QWidget):
             fix_single_line_editor_height(self.editor)
             sync_stacked_page_height(self.content_stack, self.editor.height())
         else:
-            sync_stacked_page_height(
-                self.content_stack,
-                label_content_height(self.label, column_width),
-            )
+            label_height = label_content_height(self.label, column_width)
+            sync_stacked_page_height(self.content_stack, label_height + 2)
 
     def begin_edit(self):
         if self._editing:
@@ -547,6 +545,7 @@ class HistoryDialog(QDialog):
 
         self.tasks_layout.addStretch(1)
         QTimer.singleShot(0, self._sync_history_row_text_layouts)
+        self.tasks_widget.setUpdatesEnabled(True)
 
     def add_external_archived_task(self, archived_task):
         """Append a row for a task archived from the main window while dialog is open."""
@@ -1494,6 +1493,7 @@ class MainWindow(QMainWindow):
 
     def _show_tutorial(self):
         dialog = TutorialDialog(self)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         avoid = self._window_rects_to_avoid()
         self._place_dialog_avoiding_rects(dialog, avoid)
         dialog.exec()
@@ -1505,6 +1505,7 @@ class MainWindow(QMainWindow):
         from src.frontend.whats_new_dialog import WhatsNewDialog
         changelog = self.app_state.get("lastChangelog", "Bug fixes and improvements.")
         dialog = WhatsNewDialog(changelog, self)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         avoid = self._window_rects_to_avoid()
         self._place_dialog_avoiding_rects(dialog, avoid)
         dialog.exec()
@@ -1541,6 +1542,8 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self._persist_window_geometry()
+        if hasattr(self, '_resize_timer') and self._resize_timer:
+            self._resize_timer.stop()
         if getattr(self, '_force_quit', False):
             if getattr(self, '_skip_close_confirm', False):
                 self._tray.hide()
@@ -1595,6 +1598,9 @@ class MainWindow(QMainWindow):
         self.btn_history.setIcon(_history_toolbar_icon(16, chrome_color))
         for b in (self.btn_menu, self.btn_settings, self.btn_minimize, self.btn_exit):
             b.setStyleSheet("")
+        refresh_glass_shells(self, theme_id)
+        if hasattr(self, "_tray"):
+            self._tray.restyle(theme)
 
     def apply_settings(self):
         self.app_state = self.state_manager.state
@@ -1669,36 +1675,43 @@ class MainWindow(QMainWindow):
             from src.frontend.themed_message_dialog import ThemedMessageDialog
             ThemedMessageDialog.warning(self, "Download Failed", "Could not download the update. Please try again later.")
 
+    def _apply_window_layer(self):
+        """Apply window layer (AoT / Pin to Desktop) without rebuilding task list."""
+        from src.backend.window_layer import compose_main_window_flags, reconcile_layer_settings
+        reconcile_layer_settings(self.app_state)
+        flags = compose_main_window_flags(
+            self.app_state.get("pinnedToDesktop", False),
+            self.app_state.get("alwaysOnTop", False),
+        )
+        geo = self.geometry()
+        self.setWindowFlags(flags)
+        self.setGeometry(geo)
+        self.show()
+        QTimer.singleShot(0, self._sync_task_row_text_layouts)
+
     def toggle_always_on_top(self, checked: bool):
         self.app_state = self.state_manager.state
         self.app_state["alwaysOnTop"] = checked
         if checked:
             self.app_state["pinnedToDesktop"] = False
-        reconcile_layer_settings(self.app_state)
         self.state_manager.save()
-        geo = self.saveGeometry()
-        self.apply_settings()
-        self.restoreGeometry(geo)
+        self._apply_window_layer()
 
     def toggle_pinned_to_desktop(self):
         self.app_state = self.state_manager.state
         self.app_state["pinnedToDesktop"] = not self.app_state.get("pinnedToDesktop", False)
         if self.app_state["pinnedToDesktop"]:
             self.app_state["alwaysOnTop"] = False
-        reconcile_layer_settings(self.app_state)
         self.state_manager.save()
-        geo = self.saveGeometry()
-        self.apply_settings()
-        self.restoreGeometry(geo)
+        self._apply_window_layer()
 
     def _toggle_pin_to_desktop_from_menu(self, checked: bool):
         self.app_state = self.state_manager.state
         self.app_state["pinnedToDesktop"] = checked
         if checked:
             self.app_state["alwaysOnTop"] = False
-        reconcile_layer_settings(self.app_state)
         self.state_manager.save()
-        geo = self.saveGeometry()
+        self._apply_window_layer()
         self.apply_settings()
         self.restoreGeometry(geo)
 
@@ -1910,7 +1923,13 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._sync_task_list_viewport_width()
-        self._sync_task_row_text_layouts()
+        if hasattr(self, '_resize_timer') and self._resize_timer.isActive():
+            self._resize_timer.stop()
+        else:
+            self._resize_timer = QTimer(self)
+            self._resize_timer.setSingleShot(True)
+            self._resize_timer.timeout.connect(self._sync_task_row_text_layouts)
+        self._resize_timer.start(100)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -2180,7 +2199,7 @@ class MainWindow(QMainWindow):
         return tasks_for_group(self.tasks, group_id, include_done=True)
         
     def render_tasks(self):
-        # Clear current layout
+        self.tasks_widget.setUpdatesEnabled(False)
         while self.tasks_layout.count():
             child = self.tasks_layout.takeAt(0)
             if child.widget():
@@ -2243,6 +2262,8 @@ class MainWindow(QMainWindow):
         self.tasks_layout.addStretch(1)
         self._sync_task_list_viewport_width()
         self._sync_task_row_text_layouts()
+        self.tasks_widget.setUpdatesEnabled(True)
+        import gc; gc.collect()
 
         central = self.centralWidget()
         if central is not None:
@@ -2773,6 +2794,7 @@ class MainWindow(QMainWindow):
     def _open_support_dialog(self):
         from src.frontend.support_dialog import SupportDialog
         dialog = SupportDialog(self)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._place_dialog_avoiding_rects(dialog, self._window_rects_to_avoid())
         dialog.exec()
 
