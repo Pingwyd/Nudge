@@ -5,6 +5,21 @@ All notable changes to Nudge are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-06-07
+
+### Added
+- **Auto-update feature**: Nudge now checks for new releases at startup
+  (configurable in Settings → General) and on demand via the ↻ button in
+  the title bar. When an update is found, a glass-styled dialog shows the
+  version and changelog. "Download & Install" streams the new EXE to
+  `%TEMP%\Nudge_update\`, then a PowerShell script replaces the running
+  EXE and relaunches Nudge.
+- `src/backend/updater.py` — `check_for_update()`, `download_update()`,
+  `perform_update()` using stdlib only
+- `src/frontend/update_dialog.py` — `UpdateInfoDialog` matching Liquid
+  Glass style (frameless, translucent, draggable, overlap detection)
+- `checkForUpdates` / `updateCheckUrl` settings persisted in appstate
+
 ## [1.0.5] - 2026-06-07
 
 ### Fixed

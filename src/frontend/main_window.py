@@ -1,3 +1,4 @@
+import threading
 from datetime import datetime
 
 from PyQt6.QtWidgets import (
@@ -63,6 +64,9 @@ from src.backend.task_groups import (
     tasks_for_group,
 )
 from src.backend.window_layer import compose_main_window_flags, reconcile_layer_settings
+from src.backend.updater import check_for_update, perform_update, UpdateCheckResult
+from src import __version__
+from src.frontend.update_dialog import UpdateInfoDialog
 from src.frontend.history_row import HistoryRowWidget
 from src.frontend.task_group_section import TaskGroupSection
 from src.frontend.themed_message_dialog import ThemedMessageDialog
@@ -705,6 +709,7 @@ class SettingsDialog(QDialog):
             "alwaysOnTopShortcut": self.always_on_top_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText),
             "exportShortcut": self.export_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText),
             "groupsEnabled": self.groups_enabled_cb.isChecked(),
+            "checkForUpdates": self.check_updates_cb.isChecked(),
         }
 
     def _load_sequence(self, value, fallback):
@@ -819,6 +824,9 @@ class SettingsDialog(QDialog):
 
         self.pin_cb.toggled.connect(self._on_pin_to_desktop_toggled)
         self.always_on_top_cb.toggled.connect(self._on_always_on_top_toggled)
+
+        self.check_updates_cb = self._create_checkbox_row("Check for updates at startup", self.state_manager.state.get("checkForUpdates", True))
+        general_layout.addWidget(self.check_updates_cb)
 
         general_layout.addStretch()
 
@@ -1310,6 +1318,7 @@ class SettingsDialog(QDialog):
         parent = self.parent()
         old_groups_enabled = parent.app_state.get("groupsEnabled", True) if (parent is not None and hasattr(parent, "task_row_widgets")) else True
         self.state_manager.state["groupsEnabled"] = self.groups_enabled_cb.isChecked()
+        self.state_manager.state["checkForUpdates"] = self.check_updates_cb.isChecked()
         self.state_manager.save()
         self._saved_snapshot = self._build_snapshot()
         self._has_unsaved_changes = False
@@ -1436,6 +1445,10 @@ class MainWindow(QMainWindow):
         # Apply visual and functional settings from state
         self.apply_settings()
 
+        # Boot-time update check (deferred 3s so UI can finish rendering first)
+        if self.app_state.get("checkForUpdates", True):
+            QTimer.singleShot(3000, self._check_and_prompt_update)
+
         # First-launch tutorial
         if not self.app_state.get("seenTutorial"):
             self._show_tutorial()
@@ -1528,6 +1541,42 @@ class MainWindow(QMainWindow):
         self._restore_window_geometry()
 
         self.render_tasks()
+
+    def _check_and_prompt_update(self):
+        def _check():
+            result = check_for_update(__version__)
+            if result is None:
+                return
+            if result.available:
+                QTimer.singleShot(0, lambda: self._show_update_dialog(result))
+        self.btn_update.setEnabled(False)
+        t = threading.Thread(target=_check, daemon=True)
+        t.start()
+
+    def _show_update_dialog(self, result: UpdateCheckResult):
+        self.btn_update.setEnabled(True)
+        dialog = UpdateInfoDialog(result.latest_version, result.changelog, result.download_url, self)
+        avoid = self._window_rects_to_avoid()
+        self._place_dialog_avoiding_rects(dialog, avoid)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._apply_update(result.download_url, result.latest_version)
+
+    def _apply_update(self, download_url: str, version: str):
+        from PyQt6.QtWidgets import QMessageBox, QApplication
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Downloading Update")
+        msg.setText(f"Downloading Nudge v{version}…")
+        msg.setStandardButtons(QMessageBox.StandardButton.NoButton)
+        msg.setModal(True)
+        msg.show()
+        QApplication.processEvents()
+        success = perform_update(download_url, version)
+        msg.close()
+        if success:
+            self.close()
+        else:
+            from src.frontend.themed_message_dialog import ThemedMessageDialog
+            ThemedMessageDialog.warning(self, "Download Failed", "Could not download the update. Please try again later.")
 
     def toggle_always_on_top(self, checked: bool):
         self.app_state = self.state_manager.state
@@ -1647,6 +1696,14 @@ class MainWindow(QMainWindow):
         theme_id = normalize_theme_id(self.app_state.get("theme", "dark"))
         theme = get_theme(theme_id)
         chrome_color = theme["colors"].get("chrome_icon", theme["colors"]["text"])
+        self.btn_update = QPushButton("↻")
+        self.btn_update.setObjectName("chromeButton")
+        self.btn_update.setFixedSize(chrome_btn_sz, chrome_btn_sz)
+        self.btn_update.setToolTip("Check for Updates")
+        self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_update.clicked.connect(self._check_and_prompt_update)
+        top_bar.addWidget(self.btn_update)
+
         self.btn_feedback = QPushButton("💬")
         self.btn_feedback.setObjectName("chromeButton")
         self.btn_feedback.setFixedSize(chrome_btn_sz, chrome_btn_sz)

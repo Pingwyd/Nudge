@@ -40,7 +40,9 @@ class StateManager:
             "settingsShortcut": "Ctrl+,",
             "pinShortcut": "Ctrl+P",
             "groupsEnabled": False,
-            "lastExportDir": ""
+            "lastExportDir": "",
+            "checkForUpdates": True,
+            "updateCheckUrl": "https://api.github.com/repos/Pingwyd/Nudge/releases/latest"
         }
         self.app_name = "Nudge"
 
