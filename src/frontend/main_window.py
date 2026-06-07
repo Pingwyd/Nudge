@@ -48,6 +48,7 @@ from PyQt6.QtGui import (
     QShortcut,
 )
 from src.os_layer.desktop_pin import pin_to_desktop, unpin_from_desktop
+from src.os_layer.system_tray import SystemTrayManager
 from src.backend.input_parser import InputParser
 from src.backend.icon import get_app_icon
 from src.backend.task_store import TaskStore
@@ -1449,6 +1450,12 @@ class MainWindow(QMainWindow):
         if self.app_state.get("checkForUpdates", True):
             QTimer.singleShot(3000, self._check_and_prompt_update)
 
+        # System tray (minimize-to-tray support)
+        from PyQt6.QtWidgets import QApplication
+        self._tray = SystemTrayManager(QApplication.instance(), get_app_icon(), self)
+        self._tray.show_requested.connect(self._show_from_tray)
+        self._tray.quit_requested.connect(self._quit_from_tray)
+
         # First-launch tutorial
         if not self.app_state.get("seenTutorial"):
             self._show_tutorial()
@@ -1497,7 +1504,24 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self._persist_window_geometry()
-        super().closeEvent(event)
+        if getattr(self, '_force_quit', False):
+            self._tray.hide()
+            super().closeEvent(event)
+        else:
+            event.ignore()
+            self.hide()
+            self._tray.show_message("Nudge", "Still running in tray. Right-click tray icon to quit.")
+
+    def _show_from_tray(self):
+        self.showNormal()
+        self.activateWindow()
+        self.raise_()
+
+    def _quit_from_tray(self):
+        self._force_quit = True
+        self._tray.hide()
+        from PyQt6.QtWidgets import QApplication
+        QApplication.instance().quit()
 
     def apply_app_theme(self) -> None:
         """Re-apply global QSS when theme changes."""
@@ -1912,9 +1936,10 @@ class MainWindow(QMainWindow):
         if self._escape_count >= 2:
             self._escape_count = 0
             self._escape_timer.stop()
+            self._force_quit = True
             self.close()
         else:
-            self._escape_timer.start(1000)
+            self._escape_timer.start(500)
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Type.MouseButtonPress:
