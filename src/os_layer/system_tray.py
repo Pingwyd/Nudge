@@ -12,6 +12,7 @@ class SystemTrayManager(QObject):
     quit_requested = pyqtSignal()
     settings_requested = pyqtSignal()
     update_requested = pyqtSignal()
+    reminders_requested = pyqtSignal()
 
     def __init__(self, app: QApplication, icon: QIcon, parent: QObject | None = None):
         super().__init__(parent)
@@ -77,6 +78,9 @@ class SystemTrayManager(QObject):
 
         settings_action = menu.addAction("Settings")
         settings_action.triggered.connect(self.settings_requested.emit)
+
+        reminders_action = menu.addAction("Reminders")
+        reminders_action.triggered.connect(self.reminders_requested.emit)
 
         menu.addSeparator()
 

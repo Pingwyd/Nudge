@@ -3,17 +3,24 @@ from PyQt6.QtWidgets import QApplication
 from src import __version__
 from src.backend.icon import get_app_icon
 from src.backend.paths import get_data_dir, migrate_legacy_data
+from src.backend.single_instance import try_lock
 from src.backend.state_manager import StateManager
+from src.frontend.crash_dialog import install_crash_handler
 from src.frontend.main_window import MainWindow
 from src.frontend.theme import apply_theme_to_app, normalize_theme_id
 
 
 def main():
+    install_crash_handler()
     app = QApplication(sys.argv)
     app.setApplicationName("Nudge")
     app.setApplicationDisplayName("Nudge")
     app.setApplicationVersion(__version__)
     app.setQuitOnLastWindowClosed(True)
+
+    # Single-instance guard: if another instance is already running, exit silently.
+    if not try_lock():
+        sys.exit(0)
 
     # Set the default window icon (used by every top-level widget /
     # dialog title bar). The taskbar also reads this, but Windows
