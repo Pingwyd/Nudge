@@ -264,7 +264,7 @@ def download_update(
                             break
                         f.write(chunk)
                         downloaded += len(chunk)
-                        if progress_callback and total:
+                        if progress_callback:
                             progress_callback(downloaded, total)
             return dest_path
         except (URLError, HTTPError, OSError) as exc:
