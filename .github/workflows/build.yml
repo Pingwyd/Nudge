@@ -1,0 +1,164 @@
+name: Build Nudge
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Platform to build for"
+        type: choice
+        options: [windows, macos, linux, all]
+        default: all
+
+jobs:
+  build-windows:
+    if: ${{ github.event_name == 'push' || inputs.platform == 'windows' || inputs.platform == 'all' }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt 2>nul || true
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller Nudge.spec --clean
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nudge-Windows
+          path: dist/Nudge/
+
+  build-macos:
+    if: ${{ github.event_name == 'push' || inputs.platform == 'macos' || inputs.platform == 'all' }}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt || true
+          pip install pyinstaller
+
+      - name: Build .app with PyInstaller
+        run: |
+          pyinstaller \
+            --onefile \
+            --windowed \
+            --name Nudge \
+            --icon nudge.icns \
+            --add-data "src:src" \
+            --hidden-import "src.backend.crash_reporter" \
+            --hidden-import "src.backend.timer_manager" \
+            --hidden-import "src.backend.single_instance" \
+            --hidden-import "src.os_layer.platform_utils" \
+            --exclude-module "PyQt6.QtBluetooth" \
+            --exclude-module "PyQt6.QtDBus" \
+            --exclude-module "PyQt6.QtHelp" \
+            --exclude-module "PyQt6.QtLocation" \
+            --exclude-module "PyQt6.QtMultimedia" \
+            --exclude-module "PyQt6.QtMultimediaWidgets" \
+            --exclude-module "PyQt6.QtNetwork" \
+            --exclude-module "PyQt6.QtNfc" \
+            --exclude-module "PyQt6.QtOpenGL" \
+            --exclude-module "PyQt6.QtOpenGLWidgets" \
+            --exclude-module "PyQt6.QtPositioning" \
+            --exclude-module "PyQt6.QtPrintSupport" \
+            --exclude-module "PyQt6.QtQml" \
+            --exclude-module "PyQt6.QtQuick" \
+            --exclude-module "PyQt6.QtQuick3D" \
+            --exclude-module "PyQt6.QtSensors" \
+            --exclude-module "PyQt6.QtSerialPort" \
+            --exclude-module "PyQt6.QtSql" \
+            --exclude-module "PyQt6.QtSvg" \
+            --exclude-module "PyQt6.QtTest" \
+            --exclude-module "PyQt6.QtWebChannel" \
+            --exclude-module "PyQt6.QtWebEngine" \
+            --exclude-module "PyQt6.QtWebEngineCore" \
+            --exclude-module "PyQt6.QtWebEngineWidgets" \
+            --exclude-module "PyQt6.QtWebSockets" \
+            --exclude-module "PyQt6.QtXml" \
+            --exclude-module "tkinter" \
+            --exclude-module "test" \
+            main.py
+
+      - name: Create DMG
+        run: |
+          pip install dmgbuild
+          dmgbuild -s scripts/nudge_dmg_settings.py Nudge dist/Nudge.dmg
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nudge-macOS
+          path: dist/Nudge.dmg
+
+  build-linux:
+    if: ${{ github.event_name == 'push' || inputs.platform == 'linux' || inputs.platform == 'all' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-xinerama0 libxkbcommon-x11-0 \
+            libglib2.0-0 libegl1 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+            libxcb-shape0 libxcb-xfixes0 libxcb-xkb1
+
+      - name: Install Python deps
+        run: |
+          pip install -r requirements.txt || true
+          pip install pyinstaller
+
+      - name: Build AppImage
+        run: |
+          pyinstaller \
+            --onefile \
+            --windowed \
+            --name Nudge \
+            --icon nudge.png \
+            --add-data "src:src" \
+            --hidden-import "src.backend.crash_reporter" \
+            --hidden-import "src.backend.timer_manager" \
+            --hidden-import "src.backend.single_instance" \
+            --hidden-import "src.os_layer.platform_utils" \
+            $(python -c "print(' '.join(f'--exclude-module {m}' for m in [
+              'PyQt6.QtBluetooth','PyQt6.QtDBus','PyQt6.QtHelp',
+              'PyQt6.QtLocation','PyQt6.QtMultimedia','PyQt6.QtMultimediaWidgets',
+              'PyQt6.QtNfc','PyQt6.QtOpenGL','PyQt6.QtOpenGLWidgets',
+              'PyQt6.QtPositioning','PyQt6.QtPrintSupport','PyQt6.QtQml',
+              'PyQt6.QtQuick','PyQt6.QtQuick3D','PyQt6.QtSensors',
+              'PyQt6.QtSerialPort','PyQt6.QtSql','PyQt6.QtSvg',
+              'PyQt6.QtTest','PyQt6.QtWebChannel','PyQt6.QtWebEngine',
+              'PyQt6.QtWebEngineCore','PyQt6.QtWebEngineWidgets',
+              'PyQt6.QtWebSockets','PyQt6.QtXml','tkinter','test'
+            ]))") \
+            main.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nudge-Linux
+          path: dist/Nudge

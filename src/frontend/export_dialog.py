@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from src.os_layer.platform_utils import open_file_explorer
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QApplication,
@@ -306,6 +308,5 @@ class ExportDialog(QDialog):
             yes_label="Open file location",
             no_label="Close",
         ):
-            import os
-            os.startfile(str(path.parent))
+            open_file_explorer(str(path.parent))
         self.accept()

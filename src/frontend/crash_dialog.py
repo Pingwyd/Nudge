@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import sys
-import webbrowser
 from urllib.parse import quote
+
+from src.os_layer.platform_utils import open_url
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QGuiApplication
@@ -89,22 +90,7 @@ class CrashDialog(QDialog):
             f"&su={quote(subject)}"
             f"&body={quote(body_text)}"
         )
-        opened = webbrowser.open(gmail_uri)
-        if not opened and sys.platform == "win32":
-            try:
-                import os
-                os.startfile(gmail_uri)
-                opened = True
-            except Exception:
-                pass
-        if not opened:
-            ThemedMessageDialog.information(
-                self,
-                "Crash Report",
-                "Could not open Gmail. The crash details have been copied "
-                "to your clipboard. Please paste them into an email to "
-                "nudgefeedback@gmail.com",
-            )
+        open_url(gmail_uri)
         self.accept()
 
 

@@ -49,6 +49,7 @@ from PyQt6.QtGui import (
     QShortcut,
 )
 from src.os_layer.desktop_pin import pin_to_desktop, unpin_from_desktop
+from src.os_layer.platform_utils import open_file_explorer, open_url
 from src.os_layer.system_tray import SystemTrayManager
 from src.backend.input_parser import InputParser
 from src.backend.icon import get_app_icon
@@ -1323,8 +1324,7 @@ class SettingsDialog(QDialog):
             yes_label="Open file location",
             no_label="Close",
         ):
-            import os
-            os.startfile(str(path.parent))
+            open_file_explorer(str(path.parent))
 
     def save_changes(self):
         if not self._validate_shortcuts():
@@ -2930,14 +2930,7 @@ class MainWindow(QMainWindow):
                 f"&su={quote(subject)}"
                 f"&body={quote(body)}"
             )
-            opened = webbrowser.open(gmail_uri)
-            if not opened and sys.platform == "win32":
-                try:
-                    import os
-                    os.startfile(gmail_uri)
-                    opened = True
-                except Exception:
-                    pass
+            open_url(gmail_uri)
             if not opened:
                 ThemedMessageDialog.information(
                     self,
