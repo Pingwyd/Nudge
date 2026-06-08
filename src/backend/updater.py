@@ -103,6 +103,7 @@ class UpdateCheckResult:
     download_url: str = ""
     changelog: str = ""
     error: str = ""
+    release_id: int = 0
 
 
 FRIENDLY_CHANGELOGS: dict[str, str] = {
@@ -212,9 +213,10 @@ def check_for_update(
     tag = data.get("tag_name", "")
     latest = _parse_version(tag)
     current = _parse_version(current_version)
+    release_id = data.get("id", 0)
 
     if latest <= current:
-        return UpdateCheckResult(available=False)
+        return UpdateCheckResult(available=False, release_id=release_id)
 
     download_url = ""
     assets = data.get("assets", [])
@@ -234,6 +236,7 @@ def check_for_update(
         latest_version=tag.lstrip("vV"),
         download_url=download_url,
         changelog=data.get("body", ""),
+        release_id=release_id,
     )
 
 

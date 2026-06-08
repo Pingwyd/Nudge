@@ -1643,7 +1643,9 @@ class MainWindow(QMainWindow):
     def _on_update_check_done(self, result):
         if result.error:
             ThemedMessageDialog.information(self, "Update Check", f"Could not check for updates.\n\n{result.error}")
-        elif result.available:
+            return
+        known_id = self.app_state.get("lastSeenReleaseId", 0)
+        if result.available or (result.release_id and result.release_id != known_id):
             self._show_update_dialog(result)
         else:
             ThemedMessageDialog.information(self, "Update Check", "You\u2019re up to date!")
@@ -1651,6 +1653,7 @@ class MainWindow(QMainWindow):
     def _show_update_dialog(self, result: UpdateCheckResult):
         friendly, _ = parse_changelog(result.changelog, result.latest_version)
         self.app_state["lastChangelog"] = friendly
+        self.app_state["lastSeenReleaseId"] = result.release_id
         self.state_manager.save()
         dialog = UpdateInfoDialog(result.latest_version, friendly, result.download_url, self)
         avoid = self._window_rects_to_avoid()
