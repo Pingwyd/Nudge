@@ -145,8 +145,12 @@ class StateManager:
         # Build the command string. If running from source, include the python executable.
         executable_path = sys.executable
         script_path = os.path.abspath(sys.argv[0])
-        
+
         if script_path.endswith('.py'):
+            # Use pythonw.exe (gui-only) so no terminal window appears at startup
+            pythonw = executable_path.replace("python.exe", "pythonw.exe")
+            if os.path.exists(pythonw):
+                executable_path = pythonw
             cmd = f'"{executable_path}" "{script_path}"'
         else:
             # For packaged .exe

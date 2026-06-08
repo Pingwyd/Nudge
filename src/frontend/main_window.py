@@ -1061,6 +1061,12 @@ class SettingsDialog(QDialog):
         self.tutorial_btn.clicked.connect(self._open_tutorial)
         advanced_layout.addWidget(self.tutorial_btn)
 
+        reminders_btn = QPushButton("\u23f1\ufe0f Reminders")
+        reminders_btn.setObjectName("primaryButton")
+        reminders_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        reminders_btn.clicked.connect(self._open_reminders_from_settings)
+        advanced_layout.addWidget(reminders_btn)
+
         support_btn = QPushButton("\u2764\ufe0f Support Development")
         support_btn.setObjectName("primaryButton")
         support_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1103,6 +1109,13 @@ class SettingsDialog(QDialog):
 
         button_row = QHBoxLayout()
         button_row.setSpacing(8)
+
+        self.whatsnew_btn = QPushButton("What\u2019s New")
+        self.whatsnew_btn.setObjectName("ghostButton")
+        self.whatsnew_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.whatsnew_btn.clicked.connect(self._open_whats_new)
+        button_row.addWidget(self.whatsnew_btn)
+
         self.save_btn = QPushButton("Save")
         self.save_btn.setObjectName("primaryButton")
         self.save_btn.clicked.connect(self.save_changes)
@@ -1189,6 +1202,16 @@ class SettingsDialog(QDialog):
         parent = self.parent()
         if parent is not None and hasattr(parent, "_show_tutorial"):
             parent._show_tutorial()
+
+    def _open_whats_new(self):
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "_show_whats_new"):
+            parent._show_whats_new()
+
+    def _open_reminders_from_settings(self):
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "_open_reminders"):
+            parent._open_reminders()
 
     def _open_support_from_settings(self):
         parent = self.parent()
@@ -1444,6 +1467,9 @@ class MainWindow(QMainWindow):
         self._escape_sc = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
         self._escape_sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self._escape_sc.activated.connect(self._on_escape_pressed)
+        self._resize_timer = QTimer(self)
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.timeout.connect(self._sync_task_row_text_layouts)
 
         self.init_ui()
         from PyQt6.QtWidgets import QApplication
@@ -1475,6 +1501,14 @@ class MainWindow(QMainWindow):
         self._tray.settings_requested.connect(self.open_settings)
         self._tray.update_requested.connect(self._check_and_prompt_update)
 
+        # Timer / reminder system
+        from src.backend.timer_manager import TimerManager
+        self._timer_manager = TimerManager(self)
+        self._timer_manager.load(self.app_state.get("timers", []))
+        self._timer_manager.timer_fired.connect(self._on_timer_fired)
+        self._tray.reminders_requested.connect(self._open_reminders)
+        self.app_state["timers"] = self._timer_manager.to_list()
+
         # First-launch tutorial
         if not self.app_state.get("seenTutorial"):
             self._show_tutorial()
@@ -1500,8 +1534,9 @@ class MainWindow(QMainWindow):
             self.state_manager.save()
 
     def _show_whats_new(self):
+        from src.backend.updater import FRIENDLY_CHANGELOGS
         from src.frontend.whats_new_dialog import WhatsNewDialog
-        changelog = self.app_state.get("lastChangelog", "Bug fixes and improvements.")
+        changelog = FRIENDLY_CHANGELOGS.get(__version__) or self.app_state.get("lastChangelog", "Bug fixes and improvements.")
         dialog = WhatsNewDialog(changelog, self)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         avoid = self._window_rects_to_avoid()
@@ -1540,8 +1575,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self._persist_window_geometry()
-        if hasattr(self, '_resize_timer') and self._resize_timer:
-            self._resize_timer.stop()
+        self._resize_timer.stop()
         if getattr(self, '_force_quit', False):
             if getattr(self, '_skip_close_confirm', False):
                 self._tray.hide()
@@ -1643,7 +1677,9 @@ class MainWindow(QMainWindow):
     def _on_update_check_done(self, result):
         if result.error:
             ThemedMessageDialog.information(self, "Update Check", f"Could not check for updates.\n\n{result.error}")
-        elif result.available:
+            return
+        known_id = self.app_state.get("lastSeenReleaseId", 0)
+        if result.available or (result.release_id and result.release_id != known_id):
             self._show_update_dialog(result)
         else:
             ThemedMessageDialog.information(self, "Update Check", "You\u2019re up to date!")
@@ -1651,6 +1687,7 @@ class MainWindow(QMainWindow):
     def _show_update_dialog(self, result: UpdateCheckResult):
         friendly, _ = parse_changelog(result.changelog, result.latest_version)
         self.app_state["lastChangelog"] = friendly
+        self.app_state["lastSeenReleaseId"] = result.release_id
         self.state_manager.save()
         dialog = UpdateInfoDialog(result.latest_version, friendly, result.download_url, self)
         avoid = self._window_rects_to_avoid()
@@ -1914,12 +1951,8 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._sync_task_list_viewport_width()
-        if hasattr(self, '_resize_timer') and self._resize_timer.isActive():
+        if self._resize_timer.isActive():
             self._resize_timer.stop()
-        else:
-            self._resize_timer = QTimer(self)
-            self._resize_timer.setSingleShot(True)
-            self._resize_timer.timeout.connect(self._sync_task_row_text_layouts)
         self._resize_timer.start(100)
 
     def showEvent(self, event):
@@ -2343,6 +2376,18 @@ class MainWindow(QMainWindow):
         move_down_action.triggered.connect(lambda: self.move_task(task_ref, 1))
         menu.addAction(move_down_action)
 
+        menu.addSeparator()
+
+        move_top_action = QAction("Move to Top", self)
+        move_top_action.triggered.connect(lambda: self.move_task_to_top(task_ref))
+        menu.addAction(move_top_action)
+
+        move_bottom_action = QAction("Move to Bottom", self)
+        move_bottom_action.triggered.connect(lambda: self.move_task_to_bottom(task_ref))
+        menu.addAction(move_bottom_action)
+
+        menu.addSeparator()
+
         move_menu = menu.addMenu("Move to Group")
         for group in sorted_groups(self.groups_data):
             action = QAction(group["name"], self)
@@ -2369,17 +2414,19 @@ class MainWindow(QMainWindow):
         task_ref["text"] = new_text
         self.store.save(self.tasks)
 
-    def move_task(self, task_ref, offset):
+    def _reorder_task(self, task_ref, new_idx):
+        """Move task to new_idx within its group (or flat list)."""
         group_id = task_ref.get("groupId", GENERAL_GROUP_ID)
-        group_tasks = self._tasks_in_group(group_id)
-        if task_ref not in group_tasks:
-            return
-        idx = group_tasks.index(task_ref)
-        new_idx = idx + offset
-        if 0 <= new_idx < len(group_tasks):
+        groups_enabled = self.app_state.get("groupsEnabled", True)
+        if groups_enabled:
+            group_tasks = self._tasks_in_group(group_id)
+            if task_ref not in group_tasks:
+                return
+            idx = group_tasks.index(task_ref)
+            if idx == new_idx:
+                return
             group_tasks.insert(new_idx, group_tasks.pop(idx))
             self.tasks = rebuild_tasks_preserving_groups(self.tasks, self.groups_data, group_id, group_tasks)
-            self.store.save(self.tasks)
             section = self.group_sections.get(group_id)
             row = self.task_row_widgets.get(id(task_ref))
             if section is not None and row is not None:
@@ -2388,7 +2435,50 @@ class MainWindow(QMainWindow):
                     section.task_rows.remove(row)
                 section.add_task_row(row, index=new_idx)
                 section.refresh_header_count()
-                self._sync_task_row_text_layouts()
+        else:
+            if task_ref not in self.tasks:
+                return
+            idx = self.tasks.index(task_ref)
+            if idx == new_idx:
+                return
+            self.tasks.insert(new_idx, self.tasks.pop(idx))
+            row = self.task_row_widgets.get(id(task_ref))
+            if row is not None:
+                self.tasks_layout.removeWidget(row)
+                self.tasks_layout.insertWidget(new_idx, row, 0, Qt.AlignmentFlag.AlignTop)
+        self.store.save(self.tasks)
+        self._sync_task_row_text_layouts()
+
+    def move_task(self, task_ref, offset):
+        group_id = task_ref.get("groupId", GENERAL_GROUP_ID)
+        groups_enabled = self.app_state.get("groupsEnabled", True)
+        if groups_enabled:
+            group_tasks = self._tasks_in_group(group_id)
+            if task_ref not in group_tasks:
+                return
+            idx = group_tasks.index(task_ref)
+            new_idx = idx + offset
+            if 0 <= new_idx < len(group_tasks):
+                self._reorder_task(task_ref, new_idx)
+        else:
+            if task_ref not in self.tasks:
+                return
+            idx = self.tasks.index(task_ref)
+            new_idx = idx + offset
+            if 0 <= new_idx < len(self.tasks):
+                self._reorder_task(task_ref, new_idx)
+
+    def move_task_to_top(self, task_ref):
+        self._reorder_task(task_ref, 0)
+
+    def move_task_to_bottom(self, task_ref):
+        group_id = task_ref.get("groupId", GENERAL_GROUP_ID)
+        groups_enabled = self.app_state.get("groupsEnabled", True)
+        if groups_enabled:
+            group_tasks = self._tasks_in_group(group_id)
+            self._reorder_task(task_ref, len(group_tasks) - 1)
+        else:
+            self._reorder_task(task_ref, len(self.tasks) - 1)
 
     def _on_flat_list_drop(self, row_widget, pos: QPoint) -> None:
         task_ref = getattr(row_widget, "_task_ref", None)
@@ -2761,6 +2851,23 @@ class MainWindow(QMainWindow):
         avoid = self._window_rects_to_avoid()
         self._place_dialog_avoiding_rects(dialog, avoid)
         self._run_side_dialog(dialog)
+
+    def _on_timer_fired(self, timer_id: str, name: str):
+        msg = f"Reminder: {name}"
+        self._tray.show_message("Nudge", msg)
+        self.app_state["timers"] = self._timer_manager.to_list()
+        self.state_manager.save()
+
+    def _open_reminders(self):
+        from src.frontend.timer_dialog import TimerDialog
+        dialog = TimerDialog(self._timer_manager, self)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.finished.connect(self._on_reminders_closed)
+        dialog.show()
+
+    def _on_reminders_closed(self):
+        self.app_state["timers"] = self._timer_manager.to_list()
+        self.state_manager.save()
 
     def _show_overflow_menu(self):
         self._style_overflow_menu()
