@@ -1335,6 +1335,8 @@ class SettingsDialog(QDialog):
         self.state_manager.state["pinnedToDesktop"] = self.pin_cb.isChecked()
         self.state_manager.state["alwaysOnTop"] = self.always_on_top_cb.isChecked()
         reconcile_layer_settings(self.state_manager.state)
+        if parent is not None and hasattr(parent, "_apply_window_layer"):
+            parent._apply_window_layer()
 
         self.state_manager.state["theme"] = normalize_theme_id(self.theme_combo.currentData())
         opacity = self.opacity_slider.value() / 100.0
