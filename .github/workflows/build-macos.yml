@@ -1,0 +1,53 @@
+name: Build macOS
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          brew install create-dmg
+          pip install PyQt6 pyinstaller
+
+      - name: Build .app
+        run: |
+          pyinstaller \
+            --onefile --windowed --name Nudge \
+            --icon icon.icns \
+            --add-data "src:src" \
+            --hidden-import "src.backend.crash_reporter" \
+            --hidden-import "src.backend.timer_manager" \
+            --hidden-import "src.backend.single_instance" \
+            --hidden-import "src.os_layer.platform_utils" \
+            --exclude-module winotify \
+            main.py
+
+      - name: Create DMG
+        run: |
+          create-dmg \
+            --volname "Nudge" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "Nudge.app" 175 190 \
+            --app-drop-link 425 190 \
+            "dist/Nudge.dmg" \
+            "dist/Nudge.app"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Nudge-macOS
+          path: dist/Nudge.dmg
