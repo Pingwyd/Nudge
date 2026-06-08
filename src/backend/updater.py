@@ -186,6 +186,26 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
         "  \u2022 Error dialog now shows the actual exception detail\n"
         "  \u2022 Changelog dialogs now render styled release notes"
     ),
+    "1.5.0": (
+        "\u2728 New Features\n"
+        "  \u2022 Right-click a task to Copy its text to clipboard\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 macOS/Linux builds now work alongside Windows (cross-platform port)\n"
+        "\n"
+        "\ud83d\udce6 Improvements\n"
+        "  \u2022 Release workflow now builds Windows, macOS, and Linux in parallel\n"
+        "  \u2022 App icon now loads from .ico / .icns / .png depending on platform"
+    ),
+    "1.5.1": (
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Frameless windows now draggable and resizable on Linux (Wayland / WSLg)\n"
+        "\n"
+        "\ud83d\udce6 Improvements\n"
+        "  \u2022 Linux release now includes a .deb package for Debian/Ubuntu\n"
+        "  \u2022 Linux build includes icon.png so the tray icon shows correctly\n"
+        "  \u2022 macOS/Linux release assets now have version and platform in the filename"
+    ),
 }
 
 
