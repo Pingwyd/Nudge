@@ -75,6 +75,8 @@ jobs:
   build-macos:
     name: Build macOS DMG
     runs-on: macos-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
     steps:
       - uses: actions/checkout@v4
 
@@ -82,6 +84,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          V=$(python -c "import src; print(src.__version__)")
+          echo "VERSION=$V" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
         run: pip install PyQt6 pyinstaller certifi
@@ -101,21 +110,24 @@ jobs:
 
       - name: Create DMG
         run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
           hdiutil create \
             -volname "Nudge" \
             -srcfolder "dist/Nudge.app" \
             -ov -format UDZO \
-            "dist/Nudge.dmg"
+            "Nudge-$VERSION-macos.dmg"
 
       - uses: actions/upload-artifact@v4
         with:
           name: Nudge-macOS
-          path: dist/Nudge.dmg
+          path: Nudge-*.dmg
           retention-days: 14
 
   build-linux:
     name: Build Linux AppImage
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
     steps:
       - uses: actions/checkout@v4
 
@@ -123,6 +135,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          V=$(python -c "import src; print(src.__version__)")
+          echo "VERSION=$V" >> "$GITHUB_OUTPUT"
 
       - name: Install system deps
         run: |
@@ -149,10 +168,15 @@ jobs:
             --exclude-module winotify \
             main.py
 
+      - name: Rename asset
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          mv dist/Nudge "Nudge-$VERSION-linux"
+
       - uses: actions/upload-artifact@v4
         with:
           name: Nudge-Linux
-          path: dist/Nudge
+          path: Nudge-*-linux
           retention-days: 14
 
   release:
