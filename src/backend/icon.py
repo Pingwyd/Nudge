@@ -1,10 +1,10 @@
 """
 Application icon loader.
 
-Resolves ``icon.ico`` to the right location whether the app is running
-from source (project root) or from a PyInstaller bundle (``sys._MEIPASS``),
-and exposes a single ``get_app_icon()`` factory returning a cached
-``QIcon``.
+Resolves ``icon.ico`` / ``icon.icns`` / ``icon.png`` whether the app is
+running from source (project root) or from a PyInstaller bundle
+(``sys._MEIPASS``), and exposes a single ``get_app_icon()`` factory
+returning a cached ``QIcon``.
 """
 
 from __future__ import annotations
@@ -16,22 +16,24 @@ from pathlib import Path
 
 from PyQt6.QtGui import QIcon
 
-ICON_FILENAME = "icon.ico"
+ICON_NAMES = ("icon.ico", "icon.icns", "icon.png")
 
 
 def get_app_icon_path() -> Path | None:
-    """Return the absolute path to ``icon.ico``, or None if it cannot be found."""
-    candidates: list[Path] = []
+    """Return the absolute path to the first found icon file (ico/icns/png)."""
+    roots: list[Path] = []
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        candidates.append(Path(sys._MEIPASS) / ICON_FILENAME)
-    candidates.append(Path(__file__).resolve().parent.parent.parent / ICON_FILENAME)
+        roots.append(Path(sys._MEIPASS))
+    roots.append(Path(__file__).resolve().parent.parent.parent)
 
-    for candidate in candidates:
-        try:
-            if candidate.is_file():
-                return candidate
-        except OSError:
-            continue
+    for root in roots:
+        for name in ICON_NAMES:
+            candidate = root / name
+            try:
+                if candidate.is_file():
+                    return candidate
+            except OSError:
+                continue
     return None
 
 

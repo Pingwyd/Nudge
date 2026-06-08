@@ -480,7 +480,11 @@ class HistoryDialog(QDialog):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint()
+            wh = self.windowHandle()
+            if wh is not None and hasattr(wh, "startSystemMove"):
+                wh.startSystemMove()
+            else:
+                self._drag_pos = event.globalPosition().toPoint()
             event.accept()
 
     def mouseMoveEvent(self, event):
@@ -1144,7 +1148,11 @@ class SettingsDialog(QDialog):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint()
+            wh = self.windowHandle()
+            if wh is not None and hasattr(wh, "startSystemMove"):
+                wh.startSystemMove()
+            else:
+                self._drag_pos = event.globalPosition().toPoint()
             event.accept()
 
     def mouseMoveEvent(self, event):

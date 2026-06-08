@@ -161,6 +161,8 @@ jobs:
             --onefile --windowed --name Nudge \
             --icon icon.png \
             --add-data "src:src" \
+            --add-data "icon.png:." \
+            --add-data "icon.ico:." \
             --hidden-import "src.backend.crash_reporter" \
             --hidden-import "src.backend.timer_manager" \
             --hidden-import "src.backend.single_instance" \
@@ -168,7 +170,48 @@ jobs:
             --exclude-module winotify \
             main.py
 
-      - name: Rename asset
+      - name: Create .deb package
+        shell: python
+        run: |
+          import os, subprocess, sys
+
+          version = "${{ steps.version.outputs.VERSION }}"
+          pkg = f"nudge_{version}"
+          os.makedirs(f"{pkg}/DEBIAN", exist_ok=True)
+          os.makedirs(f"{pkg}/usr/bin", exist_ok=True)
+          os.makedirs(f"{pkg}/usr/share/applications", exist_ok=True)
+          os.makedirs(f"{pkg}/usr/share/icons/hicolor/256x256/apps", exist_ok=True)
+
+          subprocess.run(["cp", "dist/Nudge", f"{pkg}/usr/bin/nudge"], check=True)
+          subprocess.run(["cp", "icon.png", f"{pkg}/usr/share/icons/hicolor/256x256/apps/nudge.png"], check=True)
+
+          with open(f"{pkg}/DEBIAN/control", "w") as f:
+              f.write(f"""Package: nudge
+          Version: {version}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Depends: libxcb-xinerama0, libxkbcommon-x11-0, libegl1
+          Maintainer: Nudge <nudgefeedback@gmail.com>
+          Description: A liquid-glass desktop task widget.
+           Minimal, distraction-free task manager that stays on your desktop.
+          """)
+
+          with open(f"{pkg}/usr/share/applications/nudge.desktop", "w") as f:
+              f.write("""[Desktop Entry]
+          Version=1.0
+          Type=Application
+          Name=Nudge
+          Comment=Liquid-glass desktop task widget
+          Exec=/usr/bin/nudge
+          Icon=nudge
+          Terminal=false
+          Categories=Utility;
+          """)
+
+          subprocess.run(["dpkg-deb", "--build", pkg], check=True)
+
+      - name: Rename raw binary
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
           mv dist/Nudge "Nudge-$VERSION-linux"
@@ -176,7 +219,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Nudge-Linux
-          path: Nudge-*-linux
+          path: |
+            Nudge-*-linux
+            nudge_*.deb
           retention-days: 14
 
   release:
@@ -201,6 +246,7 @@ jobs:
           files: |
             artifacts/Nudge-windows/*
             artifacts/Nudge-macOS/*
-            artifacts/Nudge-Linux/*
+            artifacts/Nudge-Linux/Nudge-*-linux
+            artifacts/Nudge-Linux/nudge_*.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
