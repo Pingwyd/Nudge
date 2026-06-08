@@ -2,6 +2,7 @@ import threading
 from datetime import datetime
 
 from PyQt6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -2369,6 +2370,10 @@ class MainWindow(QMainWindow):
         edit_action = QAction("Edit", self)
         edit_action.triggered.connect(lambda: self.edit_task(task_ref))
         menu.addAction(edit_action)
+
+        copy_action = QAction("Copy", self)
+        copy_action.triggered.connect(lambda: QApplication.clipboard().setText(task_ref.get("text", "")))
+        menu.addAction(copy_action)
 
         move_up_action = QAction("Move Up", self)
         move_up_action.triggered.connect(lambda: self.move_task(task_ref, -1))
