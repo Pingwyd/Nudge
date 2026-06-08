@@ -88,3 +88,10 @@ tasks_export.txt
 
 # ─── Reference images not used by the build ────────────────────────────────
 istockphoto-*.jpg
+
+# ─── Task export artifacts ─────────────────────────────────────────────────
+tasks_export.md
+tasks_export.txt
+
+# ─── Prompt / instruction files (session context) ──────────────────────────
+prompt.md
