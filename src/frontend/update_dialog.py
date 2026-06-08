@@ -263,12 +263,12 @@ class DownloadDialog(QDialog):
             self.progress_bar.setValue(100)
             from pathlib import Path
             import tempfile, sys
+            from src.backend.updater import _install_update, _PLATFORM_EXT
             temp_dir = Path(tempfile.gettempdir()) / "Nudge_update"
-            exe_name = f"Nudge_{self.latest_version}.exe"
-            downloaded = temp_dir / exe_name
-            from src.backend.updater import _spawn_installer
+            asset_name = f"Nudge_{self.latest_version}{_PLATFORM_EXT}"
+            downloaded = temp_dir / asset_name
             current_exe = Path(sys.executable)
-            _spawn_installer(downloaded, current_exe)
+            _install_update(downloaded, current_exe)
             self.accept()
             from PyQt6.QtWidgets import QApplication
             from src.frontend.main_window import MainWindow

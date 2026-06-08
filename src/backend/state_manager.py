@@ -1,8 +1,10 @@
 import json
 import os
-import winreg
 import sys
 from pathlib import Path
+
+if sys.platform == "win32":
+    import winreg
 from typing import Tuple
 
 from src.backend.window_geometry import (
@@ -135,39 +137,98 @@ class StateManager:
 
     def set_run_on_startup(self, enable: bool):
         """
-        Adds or removes the application from the Windows current user run registry.
+        Adds or removes the application from OS startup.
+        Windows: CurrentUser Run registry.
+        macOS: LaunchAgents plist.
+        Linux: autostart .desktop file.
         """
         self.state["startOnBoot"] = enable
         self.save()
-        
-        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        
-        # Build the command string. If running from source, include the python executable.
-        executable_path = sys.executable
-        script_path = os.path.abspath(sys.argv[0])
-
-        if script_path.endswith('.py'):
-            # Use pythonw.exe (gui-only) so no terminal window appears at startup
-            pythonw = executable_path.replace("python.exe", "pythonw.exe")
-            if os.path.exists(pythonw):
-                executable_path = pythonw
-            cmd = f'"{executable_path}" "{script_path}"'
+        if sys.platform == "win32":
+            self._set_run_on_startup_windows(enable)
+        elif sys.platform == "darwin":
+            self._set_run_on_startup_macos(enable)
         else:
-            # For packaged .exe
-            cmd = f'"{executable_path}"'
-            
+            self._set_run_on_startup_linux(enable)
+
+    def _app_command(self) -> str:
+        """Build the command string for the current executable."""
+        if sys.platform == "darwin":
+            if getattr(sys, "frozen", False):
+                bundle = Path(sys.executable).parent.parent
+                return str(bundle)
+            return f'"{sys.executable}" "{os.path.abspath(sys.argv[0])}"'
+        if sys.platform == "win32":
+            executable_path = sys.executable
+            script_path = os.path.abspath(sys.argv[0])
+            if script_path.endswith(".py"):
+                pythonw = executable_path.replace("python.exe", "pythonw.exe")
+                if os.path.exists(pythonw):
+                    executable_path = pythonw
+                return f'"{executable_path}" "{script_path}"'
+            return f'"{executable_path}"'
+        return f'"{sys.executable}" "{os.path.abspath(sys.argv[0])}"'
+
+    def _set_run_on_startup_windows(self, enable: bool):
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
         try:
-            # Open registry key with write access
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS)
-            
             if enable:
-                winreg.SetValueEx(key, self.app_name, 0, winreg.REG_SZ, cmd)
+                winreg.SetValueEx(key, self.app_name, 0, winreg.REG_SZ, self._app_command())
             else:
                 try:
                     winreg.DeleteValue(key, self.app_name)
                 except FileNotFoundError:
-                    # Key does not exist, nothing to delete
                     pass
             winreg.CloseKey(key)
         except Exception as e:
             print(f"Registry operation failed: {e}")
+
+    def _set_run_on_startup_macos(self, enable: bool):
+        plist_dir = Path.home() / "Library" / "LaunchAgents"
+        plist_dir.mkdir(parents=True, exist_ok=True)
+        plist_path = plist_dir / f"com.{self.app_name}.plist"
+        if enable:
+            app_path = self._app_command()
+            if app_path.endswith(".app"):
+                prog_args = f"""    <array>
+        <string>/usr/bin/open</string>
+        <string>{app_path}</string>
+    </array>"""
+            else:
+                prog_args = f"""    <array>
+        <string>{sys.executable}</string>
+        <string>{os.path.abspath(sys.argv[0])}</string>
+    </array>"""
+            plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.{self.app_name}</string>
+    <key>ProgramArguments</key>
+{prog_args}
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>"""
+            plist_path.write_text(plist_content, encoding="utf-8")
+        else:
+            plist_path.unlink(missing_ok=True)
+
+    def _set_run_on_startup_linux(self, enable: bool):
+        autostart_dir = Path.home() / ".config" / "autostart"
+        autostart_dir.mkdir(parents=True, exist_ok=True)
+        desktop_path = autostart_dir / f"{self.app_name}.desktop"
+        if enable:
+            desktop_content = f"""[Desktop Entry]
+Type=Application
+Name={self.app_name}
+Exec={self._app_command()}
+X-GNOME-Autostart-enabled=true
+"""
+            desktop_path.write_text(desktop_content, encoding="utf-8")
+        else:
+            desktop_path.unlink(missing_ok=True)

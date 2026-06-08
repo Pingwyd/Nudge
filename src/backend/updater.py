@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -10,6 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 from urllib.error import URLError, HTTPError
+
+from src.os_layer.platform_utils import is_windows, is_macos, is_linux
 
 DEFAULT_CHECK_URL = "https://api.github.com/repos/Pingwyd/Nudge/releases/latest"
 DEFAULT_DOWNLOAD_BASE = "https://github.com/Pingwyd/Nudge/releases/latest/download"
@@ -55,11 +58,9 @@ def _fetch_url(url, headers, timeout=10):
     return _ps_fetch(url, headers, timeout)
 
 def _ps_fetch(url, headers, timeout):
-    """Fallback HTTPS GET via PowerShell — bypasses Python's _ssl DLL entirely.
-
-    Writes raw UTF-8 bytes to stdout via .NET's stdout stream to avoid
-    PowerShell pipeline encoding corruption (UTF-16LE → garbled text).
-    """
+    """Fallback HTTPS GET via PowerShell — Windows only."""
+    if not is_windows():
+        raise RuntimeError("PowerShell fallback is Windows-only")
     hdr = "@{" + ";".join(f'"{k}"="{v}"' for k, v in headers.items()) + "}"
     ps = (
         "$r = Invoke-WebRequest -Uri '{}' -Headers {} -TimeoutSec {} -UseBasicParsing;"
@@ -67,7 +68,7 @@ def _ps_fetch(url, headers, timeout):
         "$s = [System.Console]::OpenStandardOutput();"
         "$s.Write($b, 0, $b.Length); $s.Close()"
     ).format(url.replace("'", "''"), hdr, timeout)
-    _ps_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    _ps_flags = subprocess.CREATE_NO_WINDOW
     result = subprocess.run(
         ["powershell", "-NoProfile", "-Command", ps],
         capture_output=True, timeout=timeout + 5, creationflags=_ps_flags,
@@ -79,12 +80,14 @@ def _ps_fetch(url, headers, timeout):
 
 
 def _ps_download(url, dest_path, timeout=120):
-    """Fallback file download via PowerShell when Python's _ssl DLL is broken."""
+    """Fallback file download via PowerShell — Windows only."""
+    if not is_windows():
+        raise RuntimeError("PowerShell download fallback is Windows-only")
     ps = (
         "$r = Invoke-WebRequest -Uri '{}' -Headers @{{\"User-Agent\"=\"Nudge/1.0\"}} "
         "-TimeoutSec {} -OutFile '{}' -UseBasicParsing"
     ).format(url.replace("'", "''"), timeout, str(dest_path).replace("'", "''"))
-    _ps_flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    _ps_flags = subprocess.CREATE_NO_WINDOW
     result = subprocess.run(
         ["powershell", "-NoProfile", "-Command", ps],
         capture_output=True, timeout=timeout + 30, creationflags=_ps_flags,
@@ -94,6 +97,18 @@ def _ps_download(url, dest_path, timeout=120):
         raise RuntimeError(err or "PowerShell download failed")
     if not dest_path.exists():
         raise RuntimeError("PowerShell download created no output file")
+
+
+_PLATFORM_EXT = ".exe" if is_windows() else ".dmg" if is_macos() else ".AppImage"
+
+
+def select_platform_asset(assets: list[dict]) -> str:
+    """Pick the correct platform installer asset from a release asset list."""
+    ext = _PLATFORM_EXT
+    candidates = [a for a in assets if a.get("name", "").endswith(ext)]
+    if candidates:
+        return candidates[0].get("browser_download_url", "")
+    return ""
 
 
 @dataclass
@@ -221,13 +236,7 @@ def check_for_update(
     download_url = ""
     assets = data.get("assets", [])
     if assets:
-        for asset in assets:
-            name = asset.get("name", "")
-            if name.endswith(".exe"):
-                download_url = asset.get("browser_download_url", "")
-                break
-        if not download_url:
-            download_url = assets[0].get("browser_download_url", "")
+        download_url = select_platform_asset(assets)
     if not download_url:
         download_url = data.get("html_url", "")
 
@@ -247,7 +256,8 @@ def download_update(
     progress_callback: Optional[Callable[[int, int], None]] = None,
 ) -> Optional[Path]:
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest_path = dest_dir / f"Nudge_{latest_version}.exe"
+    ext = _PLATFORM_EXT
+    dest_path = dest_dir / f"Nudge_{latest_version}{ext}"
 
     ctx = _get_ssl_context()
     if ctx is not None:
@@ -283,6 +293,26 @@ def download_update(
         return None
 
 
+def perform_update(download_url: str, latest_version: str) -> bool:
+    current_exe = Path(sys.executable)
+    temp_dir = Path(tempfile.gettempdir()) / "Nudge_update"
+    downloaded = download_update(download_url, temp_dir, latest_version)
+    if downloaded is None:
+        return False
+    return _install_update(downloaded, current_exe)
+
+
+def _install_update(downloaded: Path, current_exe: Path) -> bool:
+    """Run the platform-appropriate installer for the downloaded asset."""
+    if is_windows():
+        return _spawn_installer(downloaded, current_exe)
+    if is_macos():
+        return _install_dmg(downloaded, current_exe)
+    if is_linux():
+        return _install_appimage(downloaded)
+    return False
+
+
 def _spawn_installer(downloaded_exe: Path, current_exe: Path) -> bool:
     temp_dir = downloaded_exe.parent
     script_path = temp_dir / "install.ps1"
@@ -305,14 +335,40 @@ Remove-Item "{script_path}" -Force
         return False
 
 
-def perform_update(download_url: str, latest_version: str) -> bool:
-    if getattr(sys, "frozen", False):
-        current_exe = Path(sys.executable)
-    else:
-        current_exe = Path(sys.executable)
-
-    temp_dir = Path(tempfile.gettempdir()) / "Nudge_update"
-    downloaded = download_update(download_url, temp_dir, latest_version)
-    if downloaded is None:
+def _install_dmg(dmg_path: Path, current_exe: Path) -> bool:
+    """Mount a .dmg, copy the .app bundle over the existing one, then unmount."""
+    import plistlib
+    mount_point = Path(tempfile.mkdtemp(prefix="nudge_mount_"))
+    try:
+        subprocess.run(
+            ["hdiutil", "attach", str(dmg_path), "-mountpoint", str(mount_point)],
+            check=True, capture_output=True, timeout=60,
+        )
+        app_bundles = list(mount_point.glob("*.app"))
+        if not app_bundles:
+            logging.error("No .app bundle found inside the DMG")
+            return False
+        src_app = app_bundles[0]
+        dest_app = current_exe.parent / src_app.name
+        if dest_app.exists():
+            shutil.rmtree(dest_app)
+        shutil.copytree(src_app, dest_app)
+        subprocess.run(["open", str(dest_app)], check=False)
+        return True
+    except (subprocess.CalledProcessError, OSError, shutil.Error) as exc:
+        logging.error("DMG install failed: %s", exc)
         return False
-    return _spawn_installer(downloaded, current_exe)
+    finally:
+        subprocess.run(["hdiutil", "detach", str(mount_point)], check=False, timeout=30)
+
+
+def _install_appimage(appimage_path: Path) -> bool:
+    """Make the .AppImage executable and launch it."""
+    try:
+        st = appimage_path.stat()
+        appimage_path.chmod(st.st_mode | stat.S_IEXEC)
+        subprocess.Popen([str(appimage_path)], close_fds=True)
+        return True
+    except OSError as exc:
+        logging.error("AppImage launch failed: %s", exc)
+        return False
