@@ -1,7 +1,7 @@
 # Nudge
 
 A liquid-glass desktop task widget for Windows. Always-on-top, draggable,
-and out of the way — but right there when you need it.
+and out of the way, but right there when you need it.
 
 ![Nudge](icon.ico)
 
@@ -12,7 +12,7 @@ and out of the way — but right there when you need it.
 - **History panel** for archived and completed tasks, with restore.
 - **Export** to `.txt`, `.md`, or `.csv`, optionally with full history.
 - **Keyboard shortcuts** for every common action.
-- **Persistent state** under `%APPDATA%\Nudge\` — survives reinstalls
+- **Persistent state** under `%APPDATA%\Nudge\`, survives reinstalls
   and upgrades.
 - **Portable mode** — drop a `portable.flag` file next to the EXE to keep
   state beside it (USB sticks, no-install setups).
@@ -21,10 +21,10 @@ and out of the way — but right there when you need it.
 
 Grab the latest Windows installer from the
 [Releases](https://github.com/your-org/Nudge/releases) page. Download
-`Nudge-Setup-1.0.0.exe` and run it — it will install Nudge to
+`Nudge-version-.exe` and run it — it will install Nudge to
 `%LOCALAPPDATA%\Programs\Nudge\` and create a Start Menu entry.
 
-A portable `Nudge-1.0.0-windows.zip` is also provided for users who
+A portable `Nudge-version-windows.zip` is also provided for users who
 want to run Nudge without installing.
 
 ### Windows SmartScreen

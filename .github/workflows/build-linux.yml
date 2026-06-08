@@ -27,7 +27,7 @@ jobs:
             libxcb-xfixes0 libxcb-xkb1
 
       - name: Install Python deps
-        run: pip install PyQt6 pyinstaller
+        run: pip install PyQt6 pyinstaller certifi
 
       - name: Build AppImage
         run: |

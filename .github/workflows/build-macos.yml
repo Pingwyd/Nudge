@@ -19,8 +19,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install create-dmg
-          pip install PyQt6 pyinstaller
+          pip install PyQt6 pyinstaller certifi
 
       - name: Build .app
         run: |
@@ -37,15 +36,11 @@ jobs:
 
       - name: Create DMG
         run: |
-          create-dmg \
-            --volname "Nudge" \
-            --window-pos 200 120 \
-            --window-size 600 400 \
-            --icon-size 100 \
-            --icon "Nudge.app" 175 190 \
-            --app-drop-link 425 190 \
-            "dist/Nudge.dmg" \
-            "dist/Nudge.app"
+          hdiutil create \
+            -volname "Nudge" \
+            -srcfolder "dist/Nudge.app" \
+            -ov -format UDZO \
+            "dist/Nudge.dmg"
 
       - uses: actions/upload-artifact@v4
         with:
