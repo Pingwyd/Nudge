@@ -257,8 +257,8 @@ class DownloadDialog(QDialog):
             self.status_label.setText(f"{mb_dl:.1f} MB downloaded")
 
     def _on_finished(self, success: bool):
-        self.cancel_btn.setEnabled(False)
         if success:
+            self.cancel_btn.setEnabled(False)
             self.status_label.setText("Download complete! Installing...")
             self.progress_bar.setValue(100)
             from pathlib import Path
@@ -279,6 +279,7 @@ class DownloadDialog(QDialog):
                     w.close()
                     break
         else:
+            self.cancel_btn.setText("Close")
             self.status_label.setText("Download failed. Please try again later.")
             self.progress_bar.setValue(0)
 
