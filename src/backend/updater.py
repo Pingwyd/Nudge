@@ -206,6 +206,13 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
         "  \u2022 Linux build includes icon.png so the tray icon shows correctly\n"
         "  \u2022 macOS/Linux release assets now have version and platform in the filename"
     ),
+    "1.5.2": (
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Download progress bar now updates smoothly (was stuck at 0% on some machines)\n"
+        "  \u2022 macOS update now kills the old app before launching the new one\n"
+        "  \u2022 Linux AppImage update now copies to ~/.local/bin/nudge so it persists after temp cleanup\n"
+        "  \u2022 Fixed Content-Length parsing crash when header is empty"
+    ),
 }
 
 
@@ -285,7 +292,10 @@ def download_update(
             from urllib.request import Request, urlopen
             req = Request(download_url, headers={"User-Agent": "Nudge/1.0"})
             with urlopen(req, timeout=60, context=ctx) as resp:
-                total = int(resp.headers.get("Content-Length", 0))
+                try:
+                    total = int(resp.headers.get("Content-Length", 0) or 0)
+                except (ValueError, TypeError):
+                    total = 0
                 downloaded = 0
                 with open(dest_path, "wb") as f:
                     while True:
@@ -356,7 +366,7 @@ Remove-Item "{script_path}" -Force
 
 
 def _install_dmg(dmg_path: Path, current_exe: Path) -> bool:
-    """Mount a .dmg, copy the .app bundle over the existing one, then unmount."""
+    """Mount a .dmg, copy the .app bundle over the existing one, kill the old app, launch the new one."""
     import plistlib
     mount_point = Path(tempfile.mkdtemp(prefix="nudge_mount_"))
     try:
@@ -371,6 +381,7 @@ def _install_dmg(dmg_path: Path, current_exe: Path) -> bool:
         src_app = app_bundles[0]
         dest_app = current_exe.parent / src_app.name
         if dest_app.exists():
+            subprocess.run(["killall", src_app.stem], check=False, timeout=10)
             shutil.rmtree(dest_app)
         shutil.copytree(src_app, dest_app)
         subprocess.run(["open", str(dest_app)], check=False)
@@ -383,11 +394,14 @@ def _install_dmg(dmg_path: Path, current_exe: Path) -> bool:
 
 
 def _install_appimage(appimage_path: Path) -> bool:
-    """Make the .AppImage executable and launch it."""
+    """Copy the AppImage to a persistent location, make executable, and launch it."""
+    dest = Path.home() / ".local" / "bin" / "nudge"
     try:
-        st = appimage_path.stat()
-        appimage_path.chmod(st.st_mode | stat.S_IEXEC)
-        subprocess.Popen([str(appimage_path)], close_fds=True)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(appimage_path, dest)
+        st = dest.stat()
+        dest.chmod(st.st_mode | stat.S_IEXEC)
+        subprocess.Popen([str(dest)], close_fds=True)
         return True
     except OSError as exc:
         logging.error("AppImage launch failed: %s", exc)

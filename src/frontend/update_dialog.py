@@ -253,8 +253,12 @@ class DownloadDialog(QDialog):
             mb_total = total / (1024 * 1024)
             self.status_label.setText(f"{mb_dl:.1f} MB / {mb_total:.1f} MB")
         else:
+            pct = int(downloaded / 1024) % 100  # animate bar from downloaded KB
+            self.progress_bar.setValue(min(pct, 99))
             mb_dl = downloaded / (1024 * 1024)
             self.status_label.setText(f"{mb_dl:.1f} MB downloaded")
+        from PyQt6.QtWidgets import QApplication
+        QApplication.processEvents()
 
     def _on_finished(self, success: bool):
         if success:
