@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QEvent
 from PyQt6.QtGui import QFontMetrics
 from PyQt6.QtWidgets import (
     QDialog,
@@ -156,6 +156,10 @@ class ThemedMessageDialog(QDialog):
             self._drag_pos = event.globalPosition().toPoint()
             event.accept()
 
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        self.accept()
+
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
             self.reject()
@@ -202,5 +206,25 @@ class ThemedMessageDialog(QDialog):
 
     @staticmethod
     def information(parent: Optional[QWidget], title: str, message: str) -> None:
+        from PyQt6.QtCore import QObject
+        from PyQt6.QtWidgets import QApplication as _QApp
+
         dialog = ThemedMessageDialog(parent, title, message, ["OK"], 0, "info")
-        dialog.exec()
+        dialog.setWindowModality(Qt.WindowModality.NonModal)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+
+        class _DismissOnOutsideClick(QObject):
+            def eventFilter(self, obj, event):
+                if event.type() == QEvent.Type.MouseButtonPress:
+                    if not dialog.isVisible():
+                        return False
+                    click_pt = event.globalPosition().toPoint()
+                    if not dialog.frameGeometry().contains(click_pt):
+                        dialog.close()
+                return False
+
+        _filter = _DismissOnOutsideClick()
+        qapp = _QApp.instance()
+        qapp.installEventFilter(_filter)
+        dialog.finished.connect(lambda: qapp.removeEventFilter(_filter) if qapp else None)
+        dialog.show()

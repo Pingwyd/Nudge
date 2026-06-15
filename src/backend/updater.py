@@ -213,6 +213,21 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
         "  \u2022 Linux AppImage update now copies to ~/.local/bin/nudge so it persists after temp cleanup\n"
         "  \u2022 Fixed Content-Length parsing crash when header is empty"
     ),
+    "1.6.0": (
+        "\ud83c\udf89 Task-Specific Reminders\n"
+        "  \u2022 Right-click any task to set a reminder (15m, 30m, 1h, 2h, or custom time)\n"
+        "  \u2022 Custom duration input: just type \"25 minutes\" or \"2 hours\"\n"
+        "  \u2022 View and manage pending task reminders in Settings \u2192 Advanced\n"
+        "\n"
+        "\ud83d\udce6 Dialogs & Theme\n"
+        "  \u2022 Reminder dialogs now use the app\u2019s glass-panel style\n"
+        "  \u2022 Calendar popup follows dark and light themes\n"
+        "  \u2022 Edit timer form redesigned for better readability\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 \u201cAlways on Top\u201d / \u201cPin to Desktop\u201d now work immediately after saving, no restart needed\n"
+        "  \u2022 Info dialogs (like \u201cYou\u2019re up to date\u201d) no longer block the app \u2014 click outside to close"
+    ),
 }
 
 

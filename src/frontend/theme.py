@@ -452,6 +452,87 @@ def dialog_stylesheet(theme: Dict[str, Any]) -> str:
     """
 
 
+def calendar_stylesheet(theme: Dict[str, Any]) -> str:
+    return f"""
+        QCalendarWidget {{
+            background: {_c(theme, "menu_bg")};
+            color: {_c(theme, "text")};
+        }}
+        QCalendarWidget QWidget#qt_calendar_navigationbar {{
+            background: {_c(theme, "menu_bg")};
+            border-top: 1px solid {_c(theme, "border")};
+            border-bottom: 1px solid {_c(theme, "border")};
+            padding: 4px;
+        }}
+        QCalendarWidget QToolButton {{
+            color: {_c(theme, "text")};
+            background: transparent;
+            border: none;
+            border-radius: {_r(theme, "small")}px;
+            padding: 4px 8px;
+            font-size: 13px;
+            font-weight: bold;
+        }}
+        QCalendarWidget QToolButton:hover {{
+            background: {_c(theme, "hover")};
+        }}
+        QCalendarWidget QToolButton:pressed {{
+            background: {_c(theme, "hover_strong")};
+        }}
+        QCalendarWidget QToolButton#qt_calendar_prevmonth {{
+            qproperty-icon: none;
+            qproperty-text: "\u25C0";
+            font-size: 12px;
+        }}
+        QCalendarWidget QToolButton#qt_calendar_nextmonth {{
+            qproperty-icon: none;
+            qproperty-text: "\u25B6";
+            font-size: 12px;
+        }}
+        QCalendarWidget QSpinBox {{
+            background: {_c(theme, "input_bg")};
+            color: {_c(theme, "text")};
+            border: 1px solid {_c(theme, "border")};
+            border-radius: {_r(theme, "small")}px;
+            padding: 2px 4px;
+            font-size: 13px;
+        }}
+        QCalendarWidget QSpinBox:hover {{
+            border: 1px solid {_c(theme, "border_highlight")};
+        }}
+        QCalendarWidget QAbstractItemView {{
+            background: {_c(theme, "menu_bg")};
+            color: {_c(theme, "text")};
+            selection-background-color: {_c(theme, "hover_strong")};
+            selection-color: {_c(theme, "text")};
+            border: none;
+            outline: none;
+        }}
+        QCalendarWidget QAbstractItemView:enabled {{
+            color: {_c(theme, "text")};
+        }}
+        QCalendarWidget QAbstractItemView:disabled {{
+            color: {_c(theme, "text_muted")};
+        }}
+        QCalendarWidget QAbstractItemView:focus {{
+            outline: none;
+        }}
+        QCalendarWidget QWidget#qt_calendar_calendarview {{
+            background: {_c(theme, "menu_bg")};
+        }}
+        QCalendarWidget QToolButton#qt_calendar_monthbutton {{
+            font-size: 13px;
+            padding: 4px 8px;
+            border-radius: {_r(theme, "small")}px;
+        }}
+        QCalendarWidget QToolButton#qt_calendar_yearbutton {{
+            font-size: 13px;
+            padding: 4px 8px;
+            border-radius: {_r(theme, "small")}px;
+        }}
+    """
+
+
 def key_sequence_edit_stylesheet(theme: Dict[str, Any]) -> str:
     return f"""
         QKeySequenceEdit {{
@@ -714,6 +795,7 @@ def build_application_stylesheet(theme: Dict[str, Any] | None = None) -> str:
         separator_stylesheet(theme),
         drop_indicator_stylesheet(theme),
         history_entry_label_stylesheet(theme),
+        calendar_stylesheet(theme),
     ]
     return "\n".join(sections)
 

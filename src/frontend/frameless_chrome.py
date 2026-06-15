@@ -98,6 +98,8 @@ class FramelessChromeController:
     X11 and Windows.
     """
 
+    DRAG_THRESHOLD = 5
+
     def __init__(
         self,
         window: QWidget,
@@ -114,6 +116,7 @@ class FramelessChromeController:
         self._resize_start_geom: Optional[QRect] = None
         self._dragging = False
         self._drag_offset: Optional[QPoint] = None
+        self._press_pos: Optional[QPoint] = None  # press global pos for threshold check
 
     @property
     def is_resizing(self) -> bool:
@@ -148,10 +151,10 @@ class FramelessChromeController:
             return True
 
         if not position_locked and is_title_bar_drag_zone(local_pos, edges):
-            self._dragging = True
+            self._press_pos = global_pos
             self._drag_offset = global_pos - self.window.frameGeometry().topLeft()
             self.window.setCursor(QCursor(Qt.CursorShape.SizeAllCursor))
-            # Try native move first
+            # Try native move first (only on Wayland/macOS where it exists)
             wh = self.window.windowHandle()
             if wh is not None and hasattr(wh, "startSystemMove"):
                 wh.startSystemMove()
@@ -163,6 +166,12 @@ class FramelessChromeController:
         if self.is_resizing and self._resize_origin_global is not None and self._resize_start_geom is not None:
             self._apply_resize(global_pos)
             return True
+
+        if self._press_pos is not None and not self._dragging:
+            # Engage drag only after mouse moves past threshold
+            delta = global_pos - self._press_pos
+            if delta.manhattanLength() >= self.DRAG_THRESHOLD:
+                self._dragging = True
 
         if self._dragging and self._drag_offset is not None:
             self.window.move(global_pos - self._drag_offset)
@@ -178,6 +187,7 @@ class FramelessChromeController:
         self._resize_start_geom = None
         self._dragging = False
         self._drag_offset = None
+        self._press_pos = None
         self.window.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
         return was_active
 

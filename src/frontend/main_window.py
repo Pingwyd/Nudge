@@ -1,10 +1,12 @@
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDateEdit,
+    QDateTimeEdit,
     QDialog,
     QFileDialog,
     QFrame,
@@ -21,8 +23,10 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSlider,
+    QSpinBox,
     QStackedWidget,
     QSizePolicy,
+    QTimeEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -37,7 +41,7 @@ from PyQt6.QtGui import (
     QShortcut,
     QDrag,
 )
-from PyQt6.QtCore import Qt, QRect, QEvent, QSize, QTimer, QPoint, QByteArray, QMimeData, QUrl, pyqtSignal
+from PyQt6.QtCore import Qt, QRect, QEvent, QSize, QTimer, QPoint, QByteArray, QMimeData, QUrl, pyqtSignal, QAbstractNativeEventFilter
 from PyQt6.QtGui import (
     QAction,
     QCursor,
@@ -122,6 +126,81 @@ def set_label_point_size(label, point_size, bold=False):
     font.setPointSize(point_size)
     font.setBold(bold)
     label.setFont(font)
+
+
+# --- Global hotkey support (Win32 RegisterHotKey) ---
+import ctypes
+from ctypes import wintypes
+
+WM_HOTKEY = 0x0312
+MOD_ALT = 0x0001
+MOD_CONTROL = 0x0002
+MOD_SHIFT = 0x0004
+MOD_WIN = 0x0008
+
+
+class _MSG(ctypes.Structure):
+    _fields_ = [
+        ("hwnd", wintypes.HWND),
+        ("message", wintypes.UINT),
+        ("wParam", wintypes.WPARAM),
+        ("lParam", wintypes.LPARAM),
+        ("time", wintypes.DWORD),
+        ("pt", wintypes.POINT),
+    ]
+
+
+class GlobalHotkeyFilter(QAbstractNativeEventFilter):
+    def __init__(self):
+        super().__init__()
+        self._callbacks = {}
+        self._next_id = 1000
+
+    def register(self, key_sequence_str, callback):
+        seq = QKeySequence.fromString(key_sequence_str, QKeySequence.SequenceFormat.PortableText)
+        if seq.isEmpty():
+            return None
+        key = seq[0]
+        qt_key = key.key()
+        qt_mods = key.keyboardModifiers()
+        mod = 0
+        if qt_mods & Qt.KeyboardModifier.ControlModifier:
+            mod |= MOD_CONTROL
+        if qt_mods & Qt.KeyboardModifier.AltModifier:
+            mod |= MOD_ALT
+        if qt_mods & Qt.KeyboardModifier.ShiftModifier:
+            mod |= MOD_SHIFT
+        if qt_mods & Qt.KeyboardModifier.MetaModifier:
+            mod |= MOD_WIN
+        vk = qt_key
+        hotkey_id = self._next_id
+        self._next_id += 1
+        if not ctypes.windll.user32.RegisterHotKey(None, hotkey_id, mod, vk):
+            return None
+        self._callbacks[hotkey_id] = callback
+        return hotkey_id
+
+    def unregister(self, hotkey_id):
+        if hotkey_id in self._callbacks:
+            ctypes.windll.user32.UnregisterHotKey(None, hotkey_id)
+            del self._callbacks[hotkey_id]
+
+    def unregister_all(self):
+        for hid in list(self._callbacks):
+            self.unregister(hid)
+
+    def nativeEventFilter(self, eventType, message):
+        if bytes(eventType) == b"windows_dispatcher_MSG":
+            try:
+                msg = _MSG.from_address(int(message))
+            except Exception:
+                return False, 0
+            if msg.message == WM_HOTKEY:
+                cb = self._callbacks.get(msg.wParam)
+                if cb:
+                    cb()
+                    return True, 0
+        return False, 0
 
 
 class WrappedCheckboxRow(QWidget):
@@ -727,6 +806,7 @@ class SettingsDialog(QDialog):
             self.settings_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText),
             self.pin_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText),
             self.always_on_top_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText),
+            self.toggle_tray_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText),
             self.export_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText),
         ]
         all_shortcuts = [shortcut for shortcut in all_shortcuts if shortcut]
@@ -748,6 +828,7 @@ class SettingsDialog(QDialog):
             "settings_shortcut_edit": "Ctrl+,",
             "pin_shortcut_edit": "Ctrl+P",
             "always_on_top_shortcut_edit": "Alt+T",
+            "toggle_tray_shortcut_edit": "Ctrl+M",
             "export_shortcut_edit": "Ctrl+E",
         }
         for attr, seq_str in defaults.items():
@@ -904,7 +985,16 @@ class SettingsDialog(QDialog):
 
         # ── Keyboard Shortcuts Tab (content) ──
         shortcuts_tab = QWidget()
-        shortcuts_layout = QVBoxLayout(shortcuts_tab)
+        shortcuts_outer_layout = QVBoxLayout(shortcuts_tab)
+        shortcuts_outer_layout.setContentsMargins(0, 0, 0, 0)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        scroll_content = QWidget()
+        shortcuts_layout = QVBoxLayout(scroll_content)
         shortcuts_layout.setContentsMargins(6, 8, 6, 6)
         shortcuts_layout.setSpacing(6)
 
@@ -951,6 +1041,8 @@ class SettingsDialog(QDialog):
                           "pin_shortcut_edit", "pinShortcut")
         _add_shortcut_row("Always on Top", "Toggle always-on-top window mode.", "Alt+T",
                           "always_on_top_shortcut_edit", "alwaysOnTopShortcut")
+        _add_shortcut_row("Minimize/Restore to Tray", "Hide to or restore from system tray.", "Ctrl+M",
+                          "toggle_tray_shortcut_edit", "toggleTrayShortcut")
 
         _add_section_label("Actions")
         _add_shortcut_row("Export", "Open the export dialog.", "Ctrl+E",
@@ -964,6 +1056,9 @@ class SettingsDialog(QDialog):
         reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         reset_btn.clicked.connect(self._reset_shortcuts_to_defaults)
         shortcuts_layout.addWidget(reset_btn)
+
+        scroll_area.setWidget(scroll_content)
+        shortcuts_outer_layout.addWidget(scroll_area)
 
         # ── Export Tab (content) ──
         export_tab = QWidget()
@@ -1059,6 +1154,22 @@ class SettingsDialog(QDialog):
         )
         advanced_layout.addWidget(self.groups_enabled_cb)
 
+        task_reminder_label = QLabel("Pending Task Reminders")
+        set_label_point_size(task_reminder_label, 12)
+        task_reminder_label.setStyleSheet("font-weight: 600;")
+        advanced_layout.addWidget(task_reminder_label)
+
+        self._task_reminder_list = QListWidget()
+        self._task_reminder_list.setMaximumHeight(120)
+        self._task_reminder_list.itemDoubleClicked.connect(self._clear_task_reminder_from_list)
+        advanced_layout.addWidget(self._task_reminder_list)
+
+        clear_reminder_btn = QPushButton("Clear Selected")
+        clear_reminder_btn.setObjectName("ghostButton")
+        clear_reminder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        clear_reminder_btn.clicked.connect(self._clear_selected_task_reminder)
+        advanced_layout.addWidget(clear_reminder_btn)
+
         advanced_layout.addStretch()
 
         self.tutorial_btn = QPushButton("Show welcome guide")
@@ -1145,6 +1256,7 @@ class SettingsDialog(QDialog):
         self._saved_snapshot = self._build_snapshot()
         self._has_unsaved_changes = False
         self._update_overlap_opacity()
+        self._populate_task_reminder_list()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -1227,6 +1339,47 @@ class SettingsDialog(QDialog):
         parent = self.parent()
         if parent is not None and hasattr(parent, "_open_support_dialog"):
             parent._open_support_dialog()
+
+    def _populate_task_reminder_list(self):
+        self._task_reminder_list.clear()
+        parent = self.parent()
+        if parent is None or not hasattr(parent, "tasks"):
+            return
+        now = datetime.now()
+        for task in parent.tasks:
+            reminder_str = task.get("reminderAt")
+            if not reminder_str or task.get("reminderFired", False):
+                continue
+            try:
+                reminder_dt = datetime.fromisoformat(reminder_str)
+            except (ValueError, TypeError):
+                continue
+            task_text = task.get("text", "")[:60]
+            remaining = reminder_dt - now
+            if remaining.total_seconds() > 0:
+                mins = int(remaining.total_seconds() // 60)
+                label = f"{task_text}  ({'in ' + str(mins) + 'm' if mins < 60 else 'in ' + str(mins // 60) + 'h ' + str(mins % 60) + 'm'})"
+            else:
+                label = f"{task_text}  (due now)"
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, id(task))
+            self._task_reminder_list.addItem(item)
+
+    def _clear_task_reminder_from_list(self, item):
+        parent = self.parent()
+        if parent is None or not hasattr(parent, "_clear_task_reminder"):
+            return
+        task_id = item.data(Qt.ItemDataRole.UserRole)
+        for task in parent.tasks:
+            if id(task) == task_id:
+                parent._clear_task_reminder(task)
+                break
+        self._populate_task_reminder_list()
+
+    def _clear_selected_task_reminder(self):
+        item = self._task_reminder_list.currentItem()
+        if item is not None:
+            self._clear_task_reminder_from_list(item)
 
     def _on_export_all_groups_toggled(self, checked):
         self._export_group_bulk_update = True
@@ -1343,6 +1496,7 @@ class SettingsDialog(QDialog):
         self.state_manager.state["positionLocked"] = self.lock_cb.isChecked()
         self.state_manager.state["pinnedToDesktop"] = self.pin_cb.isChecked()
         self.state_manager.state["alwaysOnTop"] = self.always_on_top_cb.isChecked()
+        parent = self.parent()
         reconcile_layer_settings(self.state_manager.state)
         if parent is not None and hasattr(parent, "_apply_window_layer"):
             parent._apply_window_layer()
@@ -1354,6 +1508,7 @@ class SettingsDialog(QDialog):
         self.state_manager.state["historyShortcut"] = self.history_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText) or "Ctrl+H"
         self.state_manager.state["settingsShortcut"] = self.settings_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText) or "Ctrl+,"
         self.state_manager.state["pinShortcut"] = self.pin_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText) or "Ctrl+P"
+        self.state_manager.state["toggleTrayShortcut"] = self.toggle_tray_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText) or "Ctrl+M"
         self.state_manager.state["alwaysOnTopShortcut"] = self.always_on_top_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText) or "Alt+T"
         self.state_manager.state["exportShortcut"] = self.export_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText) or "Ctrl+E"
         parent = self.parent()
@@ -1464,7 +1619,9 @@ class MainWindow(QMainWindow):
         self.settings_shortcut = None
         self.pin_shortcut = None
         self.always_on_top_shortcut = None
+        self.toggle_tray_shortcut = None
         self.export_shortcut = None
+        self._tray_hotkey_id = None
         self.task_row_widgets = {}
         self._active_side_dialog = None
         self._history_dialog = None
@@ -1475,6 +1632,10 @@ class MainWindow(QMainWindow):
         self._escape_timer = QTimer(self)
         self._escape_timer.setSingleShot(True)
         self._escape_timer.timeout.connect(lambda: setattr(self, '_escape_count', 0))
+
+        self._hotkey_filter = GlobalHotkeyFilter()
+        QApplication.instance().installNativeEventFilter(self._hotkey_filter)
+
         self._escape_sc = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
         self._escape_sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self._escape_sc.activated.connect(self._on_escape_pressed)
@@ -1483,8 +1644,8 @@ class MainWindow(QMainWindow):
         self._resize_timer.timeout.connect(self._sync_task_row_text_layouts)
 
         self.init_ui()
-        from PyQt6.QtWidgets import QApplication
-        QApplication.instance().installEventFilter(self)
+        from PyQt6.QtWidgets import QApplication as _QA
+        _QA.instance().installEventFilter(self)
         self._restore_window_geometry()
         self.init_keyboard_shortcuts()
         
@@ -1505,8 +1666,8 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(3000, self._check_and_prompt_update)
 
         # System tray (minimize-to-tray support)
-        from PyQt6.QtWidgets import QApplication
-        self._tray = SystemTrayManager(QApplication.instance(), get_app_icon(), self)
+        from PyQt6.QtWidgets import QApplication as _app
+        self._tray = SystemTrayManager(_app.instance(), get_app_icon(), self)
         self._tray.show_requested.connect(self._show_from_tray)
         self._tray.quit_requested.connect(self._quit_from_tray)
         self._tray.settings_requested.connect(self.open_settings)
@@ -1519,6 +1680,11 @@ class MainWindow(QMainWindow):
         self._timer_manager.timer_fired.connect(self._on_timer_fired)
         self._tray.reminders_requested.connect(self._open_reminders)
         self.app_state["timers"] = self._timer_manager.to_list()
+
+        # Task-specific reminder checker — fires every 15 seconds
+        self._task_reminder_timer = QTimer(self)
+        self._task_reminder_timer.timeout.connect(self._check_task_reminders)
+        self._task_reminder_timer.start(15_000)
 
         # First-launch tutorial
         if not self.app_state.get("seenTutorial"):
@@ -1588,11 +1754,13 @@ class MainWindow(QMainWindow):
         self._persist_window_geometry()
         self._resize_timer.stop()
         if getattr(self, '_force_quit', False):
+            self._hotkey_filter.unregister_all()
+            QApplication.instance().removeNativeEventFilter(self._hotkey_filter)
             if getattr(self, '_skip_close_confirm', False):
                 self._tray.hide()
                 super().closeEvent(event)
-                from PyQt6.QtWidgets import QApplication
-                QApplication.instance().quit()
+                from PyQt6.QtWidgets import QApplication as _app
+                _app.instance().quit()
                 return
             reply = QMessageBox.question(
                 self,
@@ -1604,8 +1772,8 @@ class MainWindow(QMainWindow):
             if reply == QMessageBox.StandardButton.Yes:
                 self._tray.hide()
                 super().closeEvent(event)
-                from PyQt6.QtWidgets import QApplication
-                QApplication.instance().quit()
+                from PyQt6.QtWidgets import QApplication as _app
+                _app.instance().quit()
             else:
                 event.ignore()
                 self._force_quit = False
@@ -1723,6 +1891,9 @@ class MainWindow(QMainWindow):
             self.app_state.get("alwaysOnTop", False),
         )
         geo = self.geometry()
+        visible = self.isVisible()
+        if visible:
+            self.hide()
         self.setWindowFlags(flags)
         self.setGeometry(geo)
         self.show()
@@ -1760,6 +1931,18 @@ class MainWindow(QMainWindow):
 
     def _open_export_via_shortcut(self):
         self.run_export_dialog()
+
+    def _toggle_tray_visibility(self):
+        if self.isVisible() and not self.isMinimized():
+            self.hide()
+            if not getattr(self, '_tray_notified', False):
+                self._tray.show_message("Nudge", "Still running in tray. Right-click tray icon to quit.")
+                self._tray_notified = True
+                QTimer.singleShot(10000, lambda: setattr(self, '_tray_notified', False))
+        else:
+            self.showNormal()
+            self.activateWindow()
+            self.raise_()
 
     def _enable_resize_hover_tracking(self, root: QWidget) -> None:
         """Show resize cursors on window edges even when the pointer is over child widgets (M1)."""
@@ -2001,6 +2184,7 @@ class MainWindow(QMainWindow):
         pin_sequence = QKeySequence.fromString(self.app_state.get("pinShortcut", "Ctrl+P"), QKeySequence.SequenceFormat.PortableText)
         aot_sequence = QKeySequence.fromString(self.app_state.get("alwaysOnTopShortcut", "Alt+T"), QKeySequence.SequenceFormat.PortableText)
         export_sequence = QKeySequence.fromString(self.app_state.get("exportShortcut", "Ctrl+E"), QKeySequence.SequenceFormat.PortableText)
+        tray_sequence = QKeySequence.fromString(self.app_state.get("toggleTrayShortcut", "Ctrl+M"), QKeySequence.SequenceFormat.PortableText)
 
         if self.history_shortcut is not None:
             self.history_shortcut.setParent(None)
@@ -2014,6 +2198,9 @@ class MainWindow(QMainWindow):
         if self.always_on_top_shortcut is not None:
             self.always_on_top_shortcut.setParent(None)
             self.always_on_top_shortcut.deleteLater()
+        if self._tray_hotkey_id is not None:
+            self._hotkey_filter.unregister(self._tray_hotkey_id)
+            self._tray_hotkey_id = None
         if self.export_shortcut is not None:
             self.export_shortcut.setParent(None)
             self.export_shortcut.deleteLater()
@@ -2034,6 +2221,14 @@ class MainWindow(QMainWindow):
             self.always_on_top_shortcut = QShortcut(aot_sequence, self)
             self.always_on_top_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             self.always_on_top_shortcut.activated.connect(self._toggle_always_on_top_via_shortcut)
+
+        if not tray_sequence.isEmpty():
+            hid = self._hotkey_filter.register(
+                self.app_state.get("toggleTrayShortcut", "Ctrl+M"),
+                self._toggle_tray_visibility,
+            )
+            if hid is not None:
+                self._tray_hotkey_id = hid
 
         if not export_sequence.isEmpty():
             self.export_shortcut = QShortcut(export_sequence, self)
@@ -2382,6 +2577,33 @@ class MainWindow(QMainWindow):
         copy_action = QAction("Copy", self)
         copy_action.triggered.connect(lambda: QApplication.clipboard().setText(task_ref.get("text", "")))
         menu.addAction(copy_action)
+
+        menu.addSeparator()
+
+        reminder_menu = menu.addMenu("Set Reminder")
+        remind_15m = QAction("15 minutes", self)
+        remind_15m.triggered.connect(lambda: self._set_task_reminder(task_ref, 15))
+        reminder_menu.addAction(remind_15m)
+        remind_30m = QAction("30 minutes", self)
+        remind_30m.triggered.connect(lambda: self._set_task_reminder(task_ref, 30))
+        reminder_menu.addAction(remind_30m)
+        remind_1h = QAction("1 hour", self)
+        remind_1h.triggered.connect(lambda: self._set_task_reminder(task_ref, 60))
+        reminder_menu.addAction(remind_1h)
+        remind_2h = QAction("2 hours", self)
+        remind_2h.triggered.connect(lambda: self._set_task_reminder(task_ref, 120))
+        reminder_menu.addAction(remind_2h)
+        remind_tomorrow = QAction("Tomorrow 9:00 AM", self)
+        remind_tomorrow.triggered.connect(lambda: self._set_task_reminder_at_time(task_ref, "09:00", days_ahead=1))
+        reminder_menu.addAction(remind_tomorrow)
+        reminder_menu.addSeparator()
+        remind_custom = QAction("Custom...", self)
+        remind_custom.triggered.connect(lambda: self._show_custom_reminder_dialog(task_ref))
+        reminder_menu.addAction(remind_custom)
+        if task_ref.get("reminderAt") and not task_ref.get("reminderFired", False):
+            clear_reminder = QAction("Clear Reminder", self)
+            clear_reminder.triggered.connect(lambda: self._clear_task_reminder(task_ref))
+            reminder_menu.addAction(clear_reminder)
 
         move_up_action = QAction("Move Up", self)
         move_up_action.triggered.connect(lambda: self.move_task(task_ref, -1))
@@ -2883,6 +3105,247 @@ class MainWindow(QMainWindow):
     def _on_reminders_closed(self):
         self.app_state["timers"] = self._timer_manager.to_list()
         self.state_manager.save()
+
+    def _check_task_reminders(self):
+        now_ts = datetime.now().timestamp()
+        found = False
+        for task in self.tasks:
+            reminder_str = task.get("reminderAt")
+            if not reminder_str or task.get("reminderFired", False):
+                continue
+            try:
+                reminder_dt = datetime.fromisoformat(reminder_str)
+            except (ValueError, TypeError):
+                continue
+            if datetime.now() >= reminder_dt:
+                task_text = task.get("text", "Task reminder")
+                self._tray.show_message("Nudge", f"Reminder: {task_text}")
+                task["reminderFired"] = True
+                repeat = task.get("reminderRepeat", 0)
+                if repeat > 0:
+                    next_dt = reminder_dt + timedelta(minutes=repeat)
+                    task["reminderAt"] = next_dt.isoformat()
+                    task["reminderFired"] = False
+                else:
+                    task.pop("reminderAt", None)
+                    task.pop("reminderFired", None)
+                    task.pop("reminderRepeat", None)
+                found = True
+        if found:
+            self.store.save(self.tasks)
+
+    def _set_task_reminder(self, task_ref, minutes_from_now: int, repeat: int = 0):
+        reminder_dt = datetime.now() + timedelta(minutes=minutes_from_now)
+        task_ref["reminderAt"] = reminder_dt.isoformat()
+        task_ref["reminderFired"] = False
+        if repeat > 0:
+            task_ref["reminderRepeat"] = repeat
+        else:
+            task_ref.pop("reminderRepeat", None)
+        self.store.save(self.tasks)
+
+    def _set_task_reminder_at_time(self, task_ref, time_str: str, days_ahead: int = 0):
+        now = datetime.now()
+        parts = time_str.split(":")
+        target = now.replace(hour=int(parts[0]), minute=int(parts[1]), second=0, microsecond=0)
+        if days_ahead > 0:
+            target += timedelta(days=days_ahead)
+        if target <= now:
+            target += timedelta(days=1)
+        task_ref["reminderAt"] = target.isoformat()
+        task_ref["reminderFired"] = False
+        task_ref.pop("reminderRepeat", None)
+        self.store.save(self.tasks)
+
+    def _clear_task_reminder(self, task_ref):
+        task_ref.pop("reminderAt", None)
+        task_ref.pop("reminderFired", None)
+        task_ref.pop("reminderRepeat", None)
+        self.store.save(self.tasks)
+
+    def _show_custom_reminder_dialog(self, task_ref):
+        from PyQt6.QtCore import QDate, QDateTime, QTime
+
+        theme_id = normalize_theme_id(self.app_state.get("theme", "dark"))
+        theme = get_theme(theme_id)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Set Reminder \u2014 Nudge")
+        dlg.resize(440, 280)
+        dlg.setMinimumSize(380, 240)
+        dlg.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        dlg.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        dlg._drag_pos = None
+
+        frame = QFrame(dlg)
+        frame.setObjectName("glassPanel")
+        frame.setGeometry(0, 0, 440, 280)
+
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(8)
+
+        title = QLabel("Set Reminder")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(title)
+
+        # -- Quick presets row --
+        presets_label = QLabel("Quick set:")
+        presets_label.setStyleSheet("font-size: 11px; color: rgba(255,255,255,160);")
+        layout.addWidget(presets_label)
+
+        duration_row = QHBoxLayout()
+        duration_row.setSpacing(8)
+        duration_input = QLineEdit()
+        duration_input.setPlaceholderText("e.g. 25 minutes, 2 hours, 3 days...")
+        duration_input.setMinimumWidth(200)
+        duration_row.addWidget(duration_input, 1)
+        duration_apply = QPushButton("Set")
+        duration_apply.setObjectName("primaryButton")
+        duration_apply.setCursor(Qt.CursorShape.PointingHandCursor)
+        duration_apply.setFixedWidth(50)
+        duration_row.addWidget(duration_apply)
+        layout.addLayout(duration_row)
+
+        duration_hint = QLabel("Format: number + unit (m = min, h = hours, d = days)")
+        duration_hint.setStyleSheet("font-size: 11px; color: rgba(255,255,255,120);")
+        layout.addWidget(duration_hint)
+
+        # -- Date and time row --
+        dt_label = QLabel("When:")
+        dt_label.setStyleSheet("font-size: 11px; color: rgba(255,255,255,160);")
+        layout.addWidget(dt_label)
+
+        dt_row = QHBoxLayout()
+        dt_row.setSpacing(10)
+
+        tomorrow = QDate.currentDate().addDays(1)
+        date_edit = QDateEdit(tomorrow)
+        date_edit.setCalendarPopup(True)
+        date_edit.setDisplayFormat("MMM d, yyyy")
+        date_edit.setMinimumDate(QDate.currentDate())
+        date_edit.setMinimumWidth(140)
+        dt_row.addWidget(date_edit)
+
+        time_edit = QTimeEdit(QTime(9, 0))
+        time_edit.setDisplayFormat("hh:mm AP")
+        time_edit.setMinimumWidth(100)
+        dt_row.addWidget(time_edit)
+
+        dt_row.addStretch()
+        layout.addLayout(dt_row)
+
+        # -- Repeat section --
+        repeat_cb = QCheckBox("Repeat every")
+        layout.addWidget(repeat_cb)
+
+        repeat_row = QHBoxLayout()
+        repeat_spin = QSpinBox()
+        repeat_spin.setRange(1, 1440)
+        repeat_spin.setValue(30)
+        repeat_spin.setSuffix(" min")
+        repeat_spin.setEnabled(False)
+        repeat_cb.toggled.connect(repeat_spin.setEnabled)
+        repeat_row.addWidget(repeat_spin)
+        repeat_row.addStretch()
+        layout.addLayout(repeat_row)
+
+        layout.addStretch()
+
+        # -- Button row --
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.addStretch()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setObjectName("primaryButton")
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_btn.clicked.connect(dlg.reject)
+        btn_row.addWidget(cancel_btn)
+        set_btn = QPushButton("Set")
+        set_btn.setObjectName("primaryButton")
+        set_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        set_btn.clicked.connect(dlg.accept)
+        btn_row.addWidget(set_btn)
+        layout.addLayout(btn_row)
+
+        # -- Duration input handler --
+        import re as _re
+
+        def _parse_duration():
+            text = duration_input.text().strip().lower()
+            if not text:
+                return
+            match = _re.match(r"(\d+)\s*(m|min|mins|minutes|h|hr|hrs|hours|d|day|days)?", text)
+            if not match:
+                return
+            amount = int(match.group(1))
+            unit = (match.group(2) or "m").lower()
+            if unit in ("d", "day", "days"):
+                delta = timedelta(days=amount)
+            elif unit in ("h", "hr", "hrs", "hours", "hour"):
+                delta = timedelta(hours=amount)
+            else:
+                delta = timedelta(minutes=amount)
+            target = datetime.now() + delta
+            date_edit.setDate(QDate(target.year, target.month, target.day))
+            time_edit.setTime(QTime(target.hour, target.minute))
+
+        duration_apply.clicked.connect(_parse_duration)
+        duration_input.returnPressed.connect(_parse_duration)
+
+        # -- Drag / resize / overlap --
+        def _resize(e):
+            frame.setGeometry(dlg.rect())
+        dlg.resizeEvent = _resize
+
+        def _mouse_press(e):
+            if e.button() == Qt.MouseButton.LeftButton:
+                dlg._drag_pos = e.globalPosition().toPoint()
+                e.accept()
+        dlg.mousePressEvent = _mouse_press
+
+        def _mouse_move(e):
+            if dlg._drag_pos is not None and e.buttons() == Qt.MouseButton.LeftButton:
+                dlg.move(dlg.pos() + e.globalPosition().toPoint() - dlg._drag_pos)
+                dlg._drag_pos = e.globalPosition().toPoint()
+                e.accept()
+        dlg.mouseMoveEvent = _mouse_move
+
+        def _key_press(e):
+            if e.key() == Qt.Key.Key_Escape:
+                dlg.reject()
+                e.accept()
+            elif e.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                dlg.accept()
+                e.accept()
+            else:
+                QDialog.keyPressEvent(dlg, e)
+        dlg.keyPressEvent = _key_press
+
+        # -- Place dialog avoiding main window --
+        avoid = self._window_rects_to_avoid()
+        self._place_dialog_avoiding_rects(dlg, avoid)
+
+        refresh_glass_shells(dlg, theme_id)
+
+        if dlg.exec():
+            q_date = date_edit.date()
+            q_time = time_edit.time()
+            reminder_dt = datetime(
+                q_date.year(), q_date.month(), q_date.day(),
+                q_time.hour(), q_time.minute(), q_time.second(),
+            )
+            if reminder_dt <= datetime.now():
+                from PyQt6.QtWidgets import QMessageBox as _MB
+                _MB.warning(dlg, "Invalid Time", "Reminder time must be in the future.")
+                return
+            task_ref["reminderAt"] = reminder_dt.isoformat()
+            task_ref["reminderFired"] = False
+            if repeat_cb.isChecked():
+                task_ref["reminderRepeat"] = repeat_spin.value()
+            else:
+                task_ref.pop("reminderRepeat", None)
+            self.store.save(self.tasks)
 
     def _show_overflow_menu(self):
         self._style_overflow_menu()

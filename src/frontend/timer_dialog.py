@@ -1,4 +1,4 @@
-"""Manage countdown/repeat reminders."""
+"""Manage countdown/repeat reminders — themed glass-panel dialog."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -17,55 +18,88 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from src.frontend.theme import (
+    get_theme,
+    glass_overlap_stylesheet,
+    normalize_theme_id,
+    refresh_glass_shells,
+)
+
 
 class TimerDialog(QDialog):
     """Add, edit, enable/disable, and remove reminder timers."""
 
     def __init__(self, timer_manager, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Reminders")
-        self.setMinimumSize(360, 300)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+        self._drag_pos = None
+        self._timer_manager = timer_manager
 
-        self._manager = timer_manager
+        self.setWindowTitle("Reminders \u2014 Nudge")
+        self.resize(480, 340)
+        self.setMinimumSize(400, 280)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+        self._frame = QFrame(self)
+        self._frame.setObjectName("glassPanel")
+
         self._build_ui()
+        self._refresh_list()
+        self._update_overlap_opacity()
 
     def _build_ui(self):
-        layout = QVBoxLayout(self)
+        layout = QVBoxLayout(self._frame)
+        layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
+
+        title = QLabel("Reminders")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(title)
 
         self._list = QListWidget()
         self._list.itemDoubleClicked.connect(self._edit_selected)
         layout.addWidget(self._list, 1)
 
         btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
         add_btn = QPushButton("Add")
+        add_btn.setObjectName("primaryButton")
+        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         add_btn.clicked.connect(self._add)
         btn_row.addWidget(add_btn)
 
         edit_btn = QPushButton("Edit")
+        edit_btn.setObjectName("primaryButton")
+        edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         edit_btn.clicked.connect(self._edit_selected)
         btn_row.addWidget(edit_btn)
 
         self._toggle_btn = QPushButton("Enable / Disable")
+        self._toggle_btn.setObjectName("primaryButton")
+        self._toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._toggle_btn.clicked.connect(self._toggle_selected)
         btn_row.addWidget(self._toggle_btn)
 
         remove_btn = QPushButton("Remove")
+        remove_btn.setObjectName("primaryButton")
+        remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         remove_btn.clicked.connect(self._remove_selected)
         btn_row.addWidget(remove_btn)
 
         btn_row.addStretch()
+
         close_btn = QPushButton("Close")
+        close_btn.setObjectName("primaryButton")
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         close_btn.clicked.connect(self.accept)
         btn_row.addWidget(close_btn)
 
         layout.addLayout(btn_row)
-        self._refresh_list()
 
     def _refresh_list(self):
         self._list.clear()
-        for cfg in self._manager.to_list():
+        for cfg in self._timer_manager.to_list():
             status = "ON" if cfg["enabled"] else "OFF"
             repeat = "repeats" if cfg["repeat"] else "once"
             mins = cfg["intervalSeconds"] // 60
@@ -79,7 +113,7 @@ class TimerDialog(QDialog):
     def _add(self):
         dlg = _TimerEditDialog(self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._manager.add(dlg.name(), dlg.interval(), dlg.repeat())
+            self._timer_manager.add(dlg.name(), dlg.interval(), dlg.repeat())
             self._refresh_list()
 
     def _edit_selected(self, _=None):
@@ -87,15 +121,14 @@ class TimerDialog(QDialog):
         if item is None:
             return
         tid = item.data(Qt.ItemDataRole.UserRole)
-        raw = [c for c in self._manager.to_list() if c["timerId"] == tid]
+        raw = [c for c in self._timer_manager.to_list() if c["timerId"] == tid]
         if not raw:
             return
         cfg = raw[0]
         dlg = _TimerEditDialog(self, name=cfg["name"], interval=cfg["intervalSeconds"], repeat=cfg["repeat"])
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            # Remove and re-add with updated values
-            self._manager.remove(tid)
-            self._manager.add(dlg.name(), dlg.interval(), dlg.repeat())
+            self._timer_manager.remove(tid)
+            self._timer_manager.add(dlg.name(), dlg.interval(), dlg.repeat())
             self._refresh_list()
 
     def _toggle_selected(self):
@@ -103,10 +136,10 @@ class TimerDialog(QDialog):
         if item is None:
             return
         tid = item.data(Qt.ItemDataRole.UserRole)
-        raw = [c for c in self._manager.to_list() if c["timerId"] == tid]
+        raw = [c for c in self._timer_manager.to_list() if c["timerId"] == tid]
         if not raw:
             return
-        self._manager.set_enabled(tid, not raw[0]["enabled"])
+        self._timer_manager.set_enabled(tid, not raw[0]["enabled"])
         self._refresh_list()
 
     def _remove_selected(self):
@@ -114,8 +147,51 @@ class TimerDialog(QDialog):
         if item is None:
             return
         tid = item.data(Qt.ItemDataRole.UserRole)
-        self._manager.remove(tid)
+        self._timer_manager.remove(tid)
         self._refresh_list()
+
+    # -- Themed glass-panel boilerplate --
+
+    def resizeEvent(self, event):
+        self._frame.setGeometry(self.rect())
+        super().resizeEvent(event)
+
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        self._update_overlap_opacity()
+
+    def _update_overlap_opacity(self):
+        parent = self.parent()
+        if parent is None:
+            theme_id = normalize_theme_id(getattr(self, "app_state", {}).get("theme", "dark"))
+            theme = get_theme(theme_id)
+            refresh_glass_shells(self, theme_id)
+            return
+        theme_id = normalize_theme_id(getattr(parent, "app_state", {}).get("theme", "dark"))
+        theme = get_theme(theme_id)
+        overlap = self.frameGeometry().intersects(parent.frameGeometry()) if hasattr(parent, "frameGeometry") else False
+        if overlap:
+            self._frame.setStyleSheet(glass_overlap_stylesheet(theme, radius=16))
+        else:
+            refresh_glass_shells(self, theme_id)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._drag_pos is not None and event.buttons() == Qt.MouseButton.LeftButton:
+            self.move(self.pos() + event.globalPosition().toPoint() - self._drag_pos)
+            self._drag_pos = event.globalPosition().toPoint()
+            event.accept()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.accept()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
 
 
 class _TimerEditDialog(QDialog):
@@ -123,33 +199,68 @@ class _TimerEditDialog(QDialog):
 
     def __init__(self, parent=None, name="", interval=300, repeat=False):
         super().__init__(parent)
-        self.setWindowTitle("Timer")
-        self.setMinimumWidth(280)
+        self._drag_pos = None
 
-        layout = QFormLayout(self)
+        self.setWindowTitle("Edit Reminder \u2014 Nudge")
+        self.resize(320, 200)
+        self.setMinimumWidth(280)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+        self._frame = QFrame(self)
+        self._frame.setObjectName("glassPanel")
+
+        self._build_ui(name, interval, repeat)
+        self._update_overlap_opacity()
+
+    def _build_ui(self, name, interval, repeat):
+        outer = QVBoxLayout(self._frame)
+        outer.setContentsMargins(18, 18, 18, 18)
+        outer.setSpacing(10)
+
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setSpacing(10)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         self._name_edit = QLineEdit(name or "Reminder")
-        layout.addRow("Name:", self._name_edit)
+        self._name_edit.setMinimumHeight(28)
+        form.addRow("Name:", self._name_edit)
 
         self._interval_spin = QSpinBox()
         self._interval_spin.setRange(1, 1440)
         self._interval_spin.setValue(interval // 60 if interval >= 60 else 1)
         self._interval_spin.setSuffix(" minutes")
-        layout.addRow("Every:", self._interval_spin)
+        self._interval_spin.setMinimumHeight(28)
+        self._interval_spin.setMinimumWidth(120)
+        form.addRow("Every:", self._interval_spin)
+
+        outer.addLayout(form)
 
         self._repeat_cb = QCheckBox("Repeat (keep firing)")
         self._repeat_cb.setChecked(repeat)
-        layout.addRow(self._repeat_cb)
+        outer.addWidget(self._repeat_cb)
+
+        outer.addStretch()
 
         btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
         btn_row.addStretch()
         ok_btn = QPushButton("OK")
+        ok_btn.setObjectName("primaryButton")
+        ok_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        ok_btn.setFixedHeight(30)
+        ok_btn.setMinimumWidth(70)
         ok_btn.clicked.connect(self.accept)
         btn_row.addWidget(ok_btn)
         cancel_btn = QPushButton("Cancel")
+        cancel_btn.setObjectName("primaryButton")
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_btn.setFixedHeight(30)
+        cancel_btn.setMinimumWidth(70)
         cancel_btn.clicked.connect(self.reject)
         btn_row.addWidget(cancel_btn)
-        layout.addRow(btn_row)
+        outer.addLayout(btn_row)
 
     def name(self) -> str:
         return self._name_edit.text().strip() or "Reminder"
@@ -159,3 +270,47 @@ class _TimerEditDialog(QDialog):
 
     def repeat(self) -> bool:
         return self._repeat_cb.isChecked()
+
+    # -- Themed glass-panel boilerplate --
+
+    def resizeEvent(self, event):
+        self._frame.setGeometry(self.rect())
+        super().resizeEvent(event)
+
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        self._update_overlap_opacity()
+
+    def _update_overlap_opacity(self):
+        parent = self.parent()
+        if parent is None:
+            refresh_glass_shells(self, "dark")
+            return
+        theme_id = normalize_theme_id(getattr(parent, "app_state", {}).get("theme", "dark"))
+        theme = get_theme(theme_id)
+        overlap = self.frameGeometry().intersects(parent.frameGeometry()) if hasattr(parent, "frameGeometry") else False
+        if overlap:
+            self._frame.setStyleSheet(glass_overlap_stylesheet(theme, radius=16))
+        else:
+            refresh_glass_shells(self, theme_id)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._drag_pos is not None and event.buttons() == Qt.MouseButton.LeftButton:
+            self.move(self.pos() + event.globalPosition().toPoint() - self._drag_pos)
+            self._drag_pos = event.globalPosition().toPoint()
+            event.accept()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.reject()
+            event.accept()
+        elif event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.accept()
+            event.accept()
+        else:
+            super().keyPressEvent(event)

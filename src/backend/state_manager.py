@@ -41,6 +41,7 @@ class StateManager:
             "historyShortcut": "Ctrl+H",
             "settingsShortcut": "Ctrl+,",
             "pinShortcut": "Ctrl+P",
+            "toggleTrayShortcut": "Ctrl+M",
             "groupsEnabled": False,
             "lastExportDir": "",
             "checkForUpdates": True,
