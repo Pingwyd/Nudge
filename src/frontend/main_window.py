@@ -2766,17 +2766,7 @@ class MainWindow(QMainWindow):
         if task_ref.get("reminderAt") and not task_ref.get("reminderFired", False):
             clear_reminder = QAction("Clear Reminder", self)
             clear_reminder.triggered.connect(lambda: self._clear_task_reminder(task_ref))
-            reminder_menu.addAction(clear_reminder)
-
-        move_up_action = QAction("Move Up", self)
-        move_up_action.triggered.connect(lambda: self.move_task(task_ref, -1))
-        menu.addAction(move_up_action)
-        
-        move_down_action = QAction("Move Down", self)
-        move_down_action.triggered.connect(lambda: self.move_task(task_ref, 1))
-        menu.addAction(move_down_action)
-
-        menu.addSeparator()
+            menu.addAction(clear_reminder)
 
         move_top_action = QAction("Move to Top", self)
         move_top_action.triggered.connect(lambda: self.move_task_to_top(task_ref))
@@ -2798,12 +2788,38 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
 
         delete_action = QAction("Delete", self)
+        delete_action.setObjectName("deleteAction")
         delete_action.triggered.connect(lambda: self.delete_task(task_ref))
         menu.addAction(delete_action)
 
+        # Calculate menu height and clamp position to screen bounds
         pos = QCursor.pos()
-        pos.setX(pos.x() - 80)
-        menu.exec(pos)
+        screen = QApplication.screenAt(pos)
+        if screen is None:
+            screen = QApplication.primaryScreen()
+        screen_rect = screen.availableGeometry()
+        
+        # Estimate menu height: action count * row height + padding
+        action_count = len(menu.actions())
+        row_height = 28  # Approximate height per menu item
+        menu_height = action_count * row_height + 8  # 8px for padding
+        menu_width = 200  # Approximate menu width
+        
+        # Clamp x position
+        x = pos.x()
+        if x + menu_width > screen_rect.right():
+            x = screen_rect.right() - menu_width
+        if x < screen_rect.left():
+            x = screen_rect.left()
+        
+        # Clamp y position
+        y = pos.y()
+        if y + menu_height > screen_rect.bottom():
+            y = screen_rect.bottom() - menu_height
+        if y < screen_rect.top():
+            y = screen_rect.top()
+        
+        menu.exec(QPoint(x, y))
 
     def edit_task(self, task_ref):
         row = self.task_row_widgets.get(id(task_ref))
