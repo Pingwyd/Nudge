@@ -253,60 +253,16 @@ class ExportDialog(QDialog):
         self._export_all_groups_cb.blockSignals(False)
 
     def _run_export(self):
+        from src.backend.export_service import run_export_with_dialog
+        
         export_format = self._selected_format()
-        label, extension = file_filter_for_format(export_format)
-        last_dir = self.main_window.state_manager.state.get("lastExportDir", "")
-        initial = str(Path(last_dir) / f"tasks_export{extension}") if last_dir else f"tasks_export{extension}"
-        filepath, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export Tasks",
-            initial,
-            f"{label};;All Files (*.*)",
-        )
-        if not filepath:
-            return
-
-        path = Path(filepath).resolve()
-        if path.suffix.lower() != extension:
-            path = path.with_suffix(extension)
-
-        if self._export_group_filter and not self._export_all_groups_cb.isChecked():
-            selected = {gid for gid, cb in self._export_group_filter.items() if cb.isChecked()}
-            if selected:
-                active_filtered = [t for t in self.main_window.tasks if t.get("groupId") in selected]
-                history_raw = self.main_window.history_store.load()
-                history_filtered = [t for t in history_raw if t.get("groupId") in selected]
-            else:
-                active_filtered = list(self.main_window.tasks)
-                history_filtered = self.main_window.history_store.load()
-        else:
-            active_filtered = list(self.main_window.tasks)
-            history_filtered = self.main_window.history_store.load()
-
-        request = ExportRequest(
-            filepath=path,
+        success = run_export_with_dialog(
+            parent_widget=self,
+            main_window=self.main_window,
             export_format=export_format,
             include_history=self.include_history_cb.isChecked(),
-            active_tasks=active_filtered,
-            history_tasks=history_filtered,
-            groups_doc=self.main_window.groups_data,
+            group_filter=self._export_group_filter,
+            all_groups_checked=self._export_all_groups_cb.isChecked() if self._export_all_groups_cb else True,
         )
-
-        try:
-            export_to_file(request)
-        except OSError as error:
-            ThemedMessageDialog.warning(self, "Export Failed", f"Could not write file:\n{error}")
-            return
-
-        self.main_window.state_manager.state["lastExportDir"] = str(path.parent)
-        self.main_window.state_manager.save()
-
-        if ThemedMessageDialog.question(
-            self,
-            "Export Complete",
-            f"Tasks exported successfully to:\n{path}\n\nDo you want to open the file location?",
-            yes_label="Open file location",
-            no_label="Close",
-        ):
-            open_file_explorer(str(path.parent))
-        self.accept()
+        if success:
+            self.accept()

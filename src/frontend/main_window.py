@@ -1044,6 +1044,24 @@ class SettingsDialog(QDialog):
         self.check_updates_cb = self._create_checkbox_row("Check for updates at startup", self.state_manager.state.get("checkForUpdates", True))
         general_layout.addWidget(self.check_updates_cb)
 
+        self.boot_notification_cb = self._create_checkbox_row("Show boot notification for pending tasks", self.state_manager.state.get("showBootNotification", True))
+        general_layout.addWidget(self.boot_notification_cb)
+
+        # Reminders shortcut
+        reminders_shortcut_row = QHBoxLayout()
+        reminders_shortcut_row.setSpacing(8)
+        reminders_shortcut_label = QLabel("Reminders shortcut")
+        reminders_shortcut_label.setStyleSheet("font-weight: 600;")
+        reminders_shortcut_row.addWidget(reminders_shortcut_label)
+        reminders_shortcut_row.addStretch()
+        self.reminders_shortcut_edit = QKeySequenceEdit()
+        self.reminders_shortcut_edit.setFixedWidth(120)
+        self.reminders_shortcut_edit.setToolTip("Click and press the desired key combination to open Reminders")
+        self.reminders_shortcut_edit.setKeySequence(self._load_sequence(self.state_manager.state.get("remindersShortcut"), ""))
+        self.reminders_shortcut_edit.keySequenceChanged.connect(self._mark_dirty)
+        reminders_shortcut_row.addWidget(self.reminders_shortcut_edit)
+        general_layout.addLayout(reminders_shortcut_row)
+
         general_layout.addStretch()
 
         # ── Appearance Tab (content) ──
@@ -1183,13 +1201,6 @@ class SettingsDialog(QDialog):
 
         shortcuts_layout.addStretch()
 
-        reset_btn = QPushButton("Reset to Defaults")
-        reset_btn.setObjectName("ghostButton")
-        reset_btn.setMinimumHeight(28)
-        reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        reset_btn.clicked.connect(self._reset_shortcuts_to_defaults)
-        shortcuts_layout.addWidget(reset_btn)
-
         scroll_area.setWidget(scroll_content)
         shortcuts_outer_layout.addWidget(scroll_area)
 
@@ -1294,7 +1305,7 @@ class SettingsDialog(QDialog):
 
         self._task_reminder_list = QListWidget()
         self._task_reminder_list.setMaximumHeight(120)
-        self._task_reminder_list.itemDoubleClicked.connect(self._clear_task_reminder_from_list)
+        self._task_reminder_list.itemDoubleClicked.connect(self._edit_task_reminder_from_list)
         advanced_layout.addWidget(self._task_reminder_list)
 
         clear_reminder_btn = QPushButton("Clear Selected")
@@ -1305,23 +1316,31 @@ class SettingsDialog(QDialog):
 
         advanced_layout.addStretch()
 
-        self.tutorial_btn = QPushButton("Show welcome guide")
-        self.tutorial_btn.setObjectName("primaryButton")
-        self.tutorial_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.tutorial_btn.clicked.connect(self._open_tutorial)
-        advanced_layout.addWidget(self.tutorial_btn)
+        # ── Help Tab (content) ──
+        help_tab = QWidget()
+        help_layout = QVBoxLayout(help_tab)
+        help_layout.setContentsMargins(6, 8, 6, 6)
+        help_layout.setSpacing(12)
+
+        tutorial_btn = QPushButton("Show welcome guide")
+        tutorial_btn.setObjectName("primaryButton")
+        tutorial_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        tutorial_btn.clicked.connect(self._open_tutorial)
+        help_layout.addWidget(tutorial_btn)
 
         reminders_btn = QPushButton("\u23f1\ufe0f Reminders")
         reminders_btn.setObjectName("primaryButton")
         reminders_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         reminders_btn.clicked.connect(self._open_reminders_from_settings)
-        advanced_layout.addWidget(reminders_btn)
+        help_layout.addWidget(reminders_btn)
 
         support_btn = QPushButton("\u2764\ufe0f Support Development")
         support_btn.setObjectName("primaryButton")
         support_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         support_btn.clicked.connect(self._open_support_from_settings)
-        advanced_layout.addWidget(support_btn)
+        help_layout.addWidget(support_btn)
+
+        help_layout.addStretch()
 
         # ── Sidebar layout: buttons on the left, stacked content on the right ──
         content_row = QHBoxLayout()
@@ -1330,7 +1349,7 @@ class SettingsDialog(QDialog):
         self._sidebar_layout = QVBoxLayout()
         self._sidebar_layout.setSpacing(4)
         self._sidebar_layout.setContentsMargins(0, 0, 0, 0)
-        tab_names = ["General", "Appearance", "Keyboard shortcuts", "Export", "Advanced"]
+        tab_names = ["General", "Appearance", "Keyboard shortcuts", "Export", "Advanced", "Help"]
         self._page_buttons = []
         self._stack = QStackedWidget()
         self._stack.addWidget(general_tab)
@@ -1338,6 +1357,7 @@ class SettingsDialog(QDialog):
         self._stack.addWidget(shortcuts_tab)
         self._stack.addWidget(export_tab)
         self._stack.addWidget(advanced_tab)
+        self._stack.addWidget(help_tab)
 
         for i, name in enumerate(tab_names):
             btn = QPushButton(name)
@@ -1357,14 +1377,16 @@ class SettingsDialog(QDialog):
         right_column.setSpacing(8)
         right_column.addWidget(self._stack, 1)
 
+        # Reset to Defaults button - always visible above Save/Close
+        self.reset_shortcuts_btn = QPushButton("Reset to Defaults")
+        self.reset_shortcuts_btn.setObjectName("ghostButton")
+        self.reset_shortcuts_btn.setMinimumHeight(28)
+        self.reset_shortcuts_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.reset_shortcuts_btn.clicked.connect(self._reset_shortcuts_to_defaults)
+        right_column.addWidget(self.reset_shortcuts_btn)
+
         button_row = QHBoxLayout()
         button_row.setSpacing(8)
-
-        self.whatsnew_btn = QPushButton("What\u2019s New")
-        self.whatsnew_btn.setObjectName("ghostButton")
-        self.whatsnew_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.whatsnew_btn.clicked.connect(self._open_whats_new)
-        button_row.addWidget(self.whatsnew_btn, 2)
 
         self.save_btn = QPushButton("Save")
         self.save_btn.setObjectName("primaryButton")
@@ -1537,6 +1559,17 @@ class SettingsDialog(QDialog):
                 break
         self._populate_task_reminder_list()
 
+    def _edit_task_reminder_from_list(self, item):
+        parent = self.parent()
+        if parent is None or not hasattr(parent, "_show_custom_reminder_dialog"):
+            return
+        task_id = item.data(Qt.ItemDataRole.UserRole)
+        for task in parent.tasks:
+            if id(task) == task_id:
+                parent._show_custom_reminder_dialog(task)
+                break
+        self._populate_task_reminder_list()
+
     def _clear_selected_task_reminder(self):
         item = self._task_reminder_list.currentItem()
         if item is not None:
@@ -1588,66 +1621,21 @@ class SettingsDialog(QDialog):
         self._export_filter_card.setVisible(has_filter)
 
     def _run_settings_export(self):
-        from pathlib import Path
-        from src.backend.export_service import file_filter_for_format, export_to_file, ExportRequest
+        from src.backend.export_service import run_export_with_dialog
 
         export_format = self.export_format_combo.currentData()
-        label, extension = file_filter_for_format(export_format)
-        last_dir = self.state_manager.state.get("lastExportDir", "")
-        initial = str(Path(last_dir) / f"tasks_export{extension}") if last_dir else f"tasks_export{extension}"
-        filepath, _ = QFileDialog.getSaveFileName(
-            self, "Export Tasks", initial, f"{label};;All Files (*.*)",
-        )
-        if not filepath:
-            return
-
-        path = Path(filepath).resolve()
-        if path.suffix.lower() != extension:
-            path = path.with_suffix(extension)
-
         parent = self.parent()
         if parent is None:
             return
 
-        if self._export_group_filter and not self._export_all_groups_cb.isChecked():
-            selected = {gid for gid, cb in self._export_group_filter.items() if cb.isChecked()}
-            # If no groups are selected, include all groups (fallback)
-            if selected:
-                active_filtered = [t for t in parent.tasks if t.get("groupId") in selected]
-                history_raw = parent.history_store.load()
-                history_filtered = [t for t in history_raw if t.get("groupId") in selected]
-            else:
-                active_filtered = list(parent.tasks)
-                history_filtered = parent.history_store.load()
-        else:
-            active_filtered = list(parent.tasks)
-            history_filtered = parent.history_store.load()
-
-        request = ExportRequest(
-            filepath=path,
+        run_export_with_dialog(
+            parent_widget=self,
+            main_window=parent,
             export_format=export_format,
             include_history=self.export_include_history_cb.isChecked(),
-            active_tasks=active_filtered,
-            history_tasks=history_filtered,
-            groups_doc=parent.groups_data,
+            group_filter=self._export_group_filter,
+            all_groups_checked=self._export_all_groups_cb.isChecked(),
         )
-
-        try:
-            export_to_file(request)
-        except OSError as error:
-            ThemedMessageDialog.warning(self, "Export Failed", f"Could not write file:\n{error}")
-            return
-
-        self.state_manager.state["lastExportDir"] = str(path.parent)
-        self.state_manager.save()
-
-        if ThemedMessageDialog.question(
-            self, "Export Complete",
-            f"Tasks exported successfully to:\n{path}\n\nDo you want to open the file location?",
-            yes_label="Open file location",
-            no_label="Close",
-        ):
-            open_file_explorer(str(path.parent))
 
     def save_changes(self):
         if not self._validate_shortcuts():
@@ -1672,10 +1660,12 @@ class SettingsDialog(QDialog):
         self.state_manager.state["toggleTrayShortcut"] = self.toggle_tray_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText) or "Ctrl+M"
         self.state_manager.state["alwaysOnTopShortcut"] = self.always_on_top_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText) or "Alt+T"
         self.state_manager.state["exportShortcut"] = self.export_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText) or "Ctrl+E"
+        self.state_manager.state["remindersShortcut"] = self.reminders_shortcut_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText) or ""
         parent = self.parent()
         old_groups_enabled = parent.app_state.get("groupsEnabled", True) if (parent is not None and hasattr(parent, "task_row_widgets")) else True
         self.state_manager.state["groupsEnabled"] = self.groups_enabled_cb.isChecked()
         self.state_manager.state["checkForUpdates"] = self.check_updates_cb.isChecked()
+        self.state_manager.state["showBootNotification"] = self.boot_notification_cb.isChecked()
         self.state_manager.save()
         self._saved_snapshot = self._build_snapshot()
         self._has_unsaved_changes = False
@@ -1816,7 +1806,8 @@ class MainWindow(QMainWindow):
         self.render_tasks()
         
         # Check for lingering tasks from yesterday and notify
-        BootChecker.check_and_notify(self.tasks)
+        if self.app_state.get("showBootNotification", True):
+            BootChecker.check_and_notify(self.tasks)
         
         # Apply visual and functional settings from state
         self.apply_settings()
@@ -2199,6 +2190,8 @@ class MainWindow(QMainWindow):
         act_feedback.triggered.connect(self._open_feedback_dialog)
         act_support = self._overflow_menu.addAction("Support Nudge")
         act_support.triggered.connect(self._open_support_dialog)
+        act_whatsnew = self._overflow_menu.addAction("What\u2019s New")
+        act_whatsnew.triggered.connect(self._show_whats_new)
 
         self.btn_menu = QPushButton("\u00b7\u00b7\u00b7")
         self.btn_menu.setObjectName("chromeButton")
