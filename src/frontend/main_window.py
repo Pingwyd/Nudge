@@ -489,7 +489,7 @@ class TaskRowWidget(QWidget):
 
 
 class HistoryDialog(QDialog):
-    def __init__(self, history_store, restore_callback, groups_data=None, parent=None):
+    def __init__(self, history_store, restore_callback, groups_data=None, parent=None, state_manager=None):
         super().__init__(parent)
         self.history_store = history_store
         self.restore_callback = restore_callback
@@ -497,16 +497,23 @@ class HistoryDialog(QDialog):
         self.rows = []
         self._history_tasks = []
         self.title_label = None
-        self._drag_pos = None
+        self._chrome = None
+        self._state_manager = state_manager
         self.init_ui()
 
     def init_ui(self):
         self.setWindowTitle("Task History")
         self.setWindowIcon(get_app_icon())
-        self.resize(380, 560)
-        self.setMinimumSize(320, 400)
+        if self._state_manager:
+            w, h = self._state_manager.get_history_window_size()
+        else:
+            w, h = 350, 450
+        self.resize(w, h)
+        self.setMinimumSize(300, 360)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setMouseTracking(True)
+        self._chrome = FramelessChromeController(self, min_width=300, min_height=360)
 
         self.bg_frame = QFrame(self)
         self.bg_frame.setObjectName("glassPanel")
@@ -556,21 +563,45 @@ class HistoryDialog(QDialog):
         self.bg_frame.setGeometry(self.rect())
         super().resizeEvent(event)
         self._sync_history_row_text_layouts()
+        if self._state_manager and event.oldSize().isValid():
+            self._state_manager.save_history_window_size(event.size().width(), event.size().height())
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            wh = self.windowHandle()
-            if wh is not None and hasattr(wh, "startSystemMove"):
-                wh.startSystemMove()
-            else:
-                self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
+        if event.button() == Qt.MouseButton.LeftButton and self._chrome is not None:
+            local_pos = event.position().toPoint()
+            global_pos = event.globalPosition().toPoint()
+            if self._chrome.handle_mouse_press(global_pos, local_pos, False):
+                event.accept()
+                return
+        super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.MouseButton.LeftButton and self._drag_pos is not None:
-            self.move(self.pos() + event.globalPosition().toPoint() - self._drag_pos)
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
+        if self._chrome is not None:
+            local_pos = event.position().toPoint()
+            global_pos = event.globalPosition().toPoint()
+            if self._chrome.handle_mouse_move(global_pos, local_pos):
+                event.accept()
+                return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._chrome is not None:
+            if self._chrome.handle_mouse_release():
+                event.accept()
+                return
+        super().mouseReleaseEvent(event)
+
+    def eventFilter(self, watched, event):
+        if (
+            event.type() == event.Type.MouseMove
+            and self._chrome is not None
+            and not self._chrome.is_resizing
+            and not self._chrome.is_dragging
+        ):
+            global_pos = event.globalPosition().toPoint()
+            local_pos = self.mapFromGlobal(global_pos)
+            self._chrome.update_hover_cursor(local_pos)
+        return super().eventFilter(watched, event)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
@@ -581,6 +612,10 @@ class HistoryDialog(QDialog):
 
     def moveEvent(self, event):
         super().moveEvent(event)
+        self._update_overlap_opacity()
+
+    def showEvent(self, event):
+        super().showEvent(event)
         self._update_overlap_opacity()
 
     def _update_overlap_opacity(self):
@@ -700,17 +735,24 @@ class TutorialDialog(QDialog):
         features = [
             ("Add a task", "Type in the input bar and press Enter. Click anywhere else to remove focus from it."),
             ("Auto-scroll", "The list scrolls automatically so your newest task is always visible."),
-            ("Edit / Delete", "Right-click a task or use the Edit button on its right."),
-            ("Groups", "Use the Group dropdown and + button to organize tasks. Disable groups in Settings \u2192 Advanced for a flat list view."),
+            ("Edit / Delete", "Right-click a task or use the Edit button on its right edge."),
+            ("Groups", "Use the Group dropdown and + button to organize tasks. Disable groups in Settings → Advanced for a flat list view."),
             ("Drag to reorder", "Drag a task by its text to reorder it within its group or move it to another group."),
-            ("Drag text out", "Drag a task's text into Notepad, a browser, or any text field \u2192 it pastes as plain text."),
-            ("History", "Click \U0001f552 to restore previously completed tasks. Newly archived tasks appear live while History is open."),
-            ("Settings", "Click \u2699 to open Settings with 5 tabs: General, Appearance, Keyboard Shortcuts, Export, and Advanced."),
+            ("Drag text out", "Drag a task's text into Notepad, a browser, or any text field → it pastes as plain text."),
+            ("Task reminders", "Right-click a task → Set Reminder. Choose a preset or pick a custom date/time. Supports repeat intervals."),
+            ("Timer", "Click the timer icon in the title bar to start a countdown. Double-click a timer to edit its duration."),
+            ("History", "Click 🕒 to restore previously completed tasks. Newly archived tasks appear live while History is open."),
+            ("Settings", "Click ⚙ to open Settings with 5 tabs: General, Appearance, Keyboard Shortcuts, Export, and Advanced."),
+            ("Overflow menu", "Click ··· for quick access to Check for Updates, Send Feedback, and Support Nudge."),
+            ("Keyboard shortcuts", "Settings → Keyboard Shortcuts to customize shortcuts for History, Settings, Timer, and more."),
+            ("Text size", "Settings → Appearance → adjust the Text Size slider to make task text larger or smaller."),
+            ("Themes", "Settings → Appearance → switch between Dark, Light, and OLED themes. Changes apply instantly."),
             ("Always on Top", "Press Alt+T to keep the window above others."),
+            ("Pin to Desktop", "Alt+P pins the window to your desktop so it stays visible behind other windows."),
+            ("Start on Boot", "Settings → General → toggle Start on Boot to launch Nudge when you sign in."),
             ("Export", "Press Ctrl+E or use the Export tab in Settings to export tasks as .txt, .md, or .csv."),
-            ("Check for updates", "Settings \u2192 General or click \U0001f504 in the title bar to check for new versions."),
-            ("Tray icon", "Right-click the tray icon to show the window or quit. The \u2716 close button minimizes to tray."),
-            ("Support development", "Click \u2615 in the title bar to buy me a coffee or sponsor on GitHub."),
+            ("Check for updates", "Settings → General or click 🔄 in the title bar to check for new versions."),
+            ("Tray icon", "Right-click the tray icon to show the window or quit. The ✖ close button minimizes to tray."),
             ("Resize", "Drag any edge or corner of the window."),
             ("Quick Quit", "Press Escape twice within 1 second to close the app."),
         ]
@@ -772,7 +814,7 @@ class SettingsDialog(QDialog):
         self.pin_shortcut_edit = None
         self.always_on_top_shortcut_edit = None
         self.export_shortcut_edit = None
-        self._drag_pos = None
+        self._chrome = None
         self.init_ui()
 
     def _build_snapshot(self):
@@ -854,18 +896,21 @@ class SettingsDialog(QDialog):
         self.setWindowIcon(get_app_icon())
         from PyQt6.QtWidgets import QApplication
         screen = self.screen() or (QApplication.primaryScreen() if QApplication.instance() else None)
+        saved_w, saved_h = self.state_manager.get_settings_window_size()
         if screen:
             available = screen.availableGeometry()
             max_h = available.height() - 80
             max_w = available.width() - 80
-            w = min(520, max_w)
-            h = min(560, max_h)
+            w = min(saved_w, max_w)
+            h = min(saved_h, max_h)
         else:
-            w, h = 520, 560
+            w, h = saved_w, saved_h
         self.resize(w, h)
         self.setMinimumSize(400, 460)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setMouseTracking(True)
+        self._chrome = FramelessChromeController(self, min_width=400, min_height=460)
         
         self.bg_frame = QFrame(self)
         self.bg_frame.setObjectName("glassPanel")
@@ -1231,7 +1276,7 @@ class SettingsDialog(QDialog):
         self.whatsnew_btn.setObjectName("ghostButton")
         self.whatsnew_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.whatsnew_btn.clicked.connect(self._open_whats_new)
-        button_row.addWidget(self.whatsnew_btn)
+        button_row.addWidget(self.whatsnew_btn, 2)
 
         self.save_btn = QPushButton("Save")
         self.save_btn.setObjectName("primaryButton")
@@ -1259,19 +1304,41 @@ class SettingsDialog(QDialog):
         self._populate_task_reminder_list()
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            wh = self.windowHandle()
-            if wh is not None and hasattr(wh, "startSystemMove"):
-                wh.startSystemMove()
-            else:
-                self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
+        if event.button() == Qt.MouseButton.LeftButton and self._chrome is not None:
+            local_pos = event.position().toPoint()
+            global_pos = event.globalPosition().toPoint()
+            if self._chrome.handle_mouse_press(global_pos, local_pos, False):
+                event.accept()
+                return
+        super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.MouseButton.LeftButton and self._drag_pos is not None:
-            self.move(self.pos() + event.globalPosition().toPoint() - self._drag_pos)
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
+        if self._chrome is not None:
+            local_pos = event.position().toPoint()
+            global_pos = event.globalPosition().toPoint()
+            if self._chrome.handle_mouse_move(global_pos, local_pos):
+                event.accept()
+                return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._chrome is not None:
+            if self._chrome.handle_mouse_release():
+                event.accept()
+                return
+        super().mouseReleaseEvent(event)
+
+    def eventFilter(self, watched, event):
+        if (
+            event.type() == event.Type.MouseMove
+            and self._chrome is not None
+            and not self._chrome.is_resizing
+            and not self._chrome.is_dragging
+        ):
+            global_pos = event.globalPosition().toPoint()
+            local_pos = self.mapFromGlobal(global_pos)
+            self._chrome.update_hover_cursor(local_pos)
+        return super().eventFilter(watched, event)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
@@ -1283,9 +1350,15 @@ class SettingsDialog(QDialog):
     def resizeEvent(self, event):
         self.bg_frame.setGeometry(self.rect())
         super().resizeEvent(event)
+        if event.oldSize().isValid():
+            self.state_manager.save_settings_window_size(event.size().width(), event.size().height())
 
     def moveEvent(self, event):
         super().moveEvent(event)
+        self._update_overlap_opacity()
+
+    def showEvent(self, event):
+        super().showEvent(event)
         self._update_overlap_opacity()
 
     def _update_overlap_opacity(self):
@@ -2017,7 +2090,7 @@ class MainWindow(QMainWindow):
         # --- Top UI Bar (Title + Window Controls) ---
         top_bar = QHBoxLayout()
         title_label = QLabel("Nudge", self)
-        set_label_point_size(title_label, 16, bold=True)
+        set_label_point_size(title_label, 12, bold=True)
         self.title_label = title_label
         top_bar.addWidget(title_label)
         
@@ -3073,6 +3146,7 @@ class MainWindow(QMainWindow):
             self.restore_task_from_history,
             self.groups_data,
             self,
+            self.state_manager,
         )
         self._history_dialog = dialog
         avoid = self._window_rects_to_avoid()

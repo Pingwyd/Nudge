@@ -20,8 +20,8 @@ DARK_THEME: Dict[str, Any] = {
     "colors": {
         "text": "#ffffff",
         "text_muted": "rgba(255, 255, 255, 180)",
-        "glass_start": "rgba(30, 30, 30, 160)",
-        "glass_end": "rgba(10, 10, 10, 130)",
+        "glass_start": "rgba(30, 30, 30, 220)",
+        "glass_end": "rgba(10, 10, 10, 200)",
         "border": "rgba(255, 255, 255, 60)",
         "border_highlight": "rgba(255, 255, 255, 90)",
         "input_bg": "rgba(0, 0, 0, 40)",
@@ -276,6 +276,9 @@ def checkbox_stylesheet(theme: Dict[str, Any]) -> str:
             background: transparent;
             border: none;
             min-height: 24px;
+        }}
+        QCheckBox QLabel {{
+            min-width: 120px;
         }}
         QCheckBox::indicator {{
             width: 18px;
@@ -662,7 +665,6 @@ def sidebar_button_stylesheet(theme: Dict[str, Any]) -> str:
             padding: 6px 12px;
             font-size: 14px;
             min-height: 30px;
-            min-width: 120px;
             text-align: left;
         }}
         QPushButton#sidebarButton:hover {{

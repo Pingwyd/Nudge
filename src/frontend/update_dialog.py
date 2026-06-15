@@ -158,7 +158,7 @@ class UpdateInfoDialog(QDialog):
 
 class DownloadThread(QThread):
     progress = pyqtSignal(int, int)
-    finished = pyqtSignal(bool)
+    finished = pyqtSignal(bool, str)
 
     def __init__(self, download_url: str, version: str, parent=None):
         super().__init__(parent)
@@ -171,11 +171,11 @@ class DownloadThread(QThread):
         import tempfile
 
         temp_dir = Path(tempfile.gettempdir()) / "Nudge_update"
-        result = download_update(
+        path, err = download_update(
             self.download_url, temp_dir, self.version,
             progress_callback=lambda dl, total: self.progress.emit(dl, total),
         )
-        self.finished.emit(result is not None)
+        self.finished.emit(path is not None, err)
 
 
 class DownloadDialog(QDialog):
@@ -213,6 +213,7 @@ class DownloadDialog(QDialog):
 
         self.status_label = QLabel("Preparing download...")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setWordWrap(True)
         sfont = self.status_label.font()
         sfont.setPointSize(10)
         self.status_label.setFont(sfont)
@@ -260,7 +261,7 @@ class DownloadDialog(QDialog):
         from PyQt6.QtWidgets import QApplication
         QApplication.processEvents()
 
-    def _on_finished(self, success: bool):
+    def _on_finished(self, success: bool, error_msg: str = ""):
         if success:
             self.cancel_btn.setEnabled(False)
             self.status_label.setText("Download complete! Installing...")
@@ -284,8 +285,10 @@ class DownloadDialog(QDialog):
                     break
         else:
             self.cancel_btn.setText("Close")
-            self.status_label.setText("Download failed. Please try again later.")
+            detail = error_msg or "Download failed. Please try again later."
+            self.status_label.setText(detail)
             self.progress_bar.setValue(0)
+            self.adjustSize()
 
     def _on_cancel(self):
         if self._thread and self._thread.isRunning():

@@ -31,6 +31,8 @@ class StateManager:
         self.state = {
             "windowPos": {"x": 100, "y": 100},
             "windowSize": {"w": DEFAULT_WINDOW_WIDTH, "h": DEFAULT_WINDOW_HEIGHT},
+            "historyWindowSize": {"w": 350, "h": 450},
+            "settingsWindowSize": {"w": 500, "h": 560},
             "pinned": False,
             "startOnBoot": False,
             "opacity": 1.0,
@@ -75,6 +77,22 @@ class StateManager:
         """Persist window position and size (always saved; restore respects position lock)."""
         self.state["windowPos"] = {"x": x, "y": y}
         self.state["windowSize"] = {"w": width, "h": height}
+        self.save()
+
+    def get_history_window_size(self) -> Tuple[int, int]:
+        size = self.state.get("historyWindowSize", {"w": 350, "h": 450})
+        return (int(size.get("w", 350)), int(size.get("h", 450)))
+
+    def save_history_window_size(self, width: int, height: int) -> None:
+        self.state["historyWindowSize"] = {"w": width, "h": height}
+        self.save()
+
+    def get_settings_window_size(self) -> Tuple[int, int]:
+        size = self.state.get("settingsWindowSize", {"w": 500, "h": 560})
+        return (int(size.get("w", 500)), int(size.get("h", 560)))
+
+    def save_settings_window_size(self, width: int, height: int) -> None:
+        self.state["settingsWindowSize"] = {"w": width, "h": height}
         self.save()
 
     @staticmethod

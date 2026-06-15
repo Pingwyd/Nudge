@@ -53,12 +53,12 @@ class ThemedMessageDialog(QDialog):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-        initial_w, initial_h = 420, 160
+        initial_w, initial_h = 350, 150
         self.resize(initial_w, initial_h)
 
         self.bg_frame = QFrame(self)
         self.bg_frame.setObjectName("glassPanel")
-        self.bg_frame.setGeometry(0, 0, initial_w, initial_h)
+        self.bg_frame.setGeometry(0, 0, 350, 150)
 
         layout = QVBoxLayout(self.bg_frame)
         layout.setContentsMargins(20, 18, 20, 18)

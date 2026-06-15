@@ -24,7 +24,7 @@ from src.backend.window_geometry import (
     MIN_WINDOW_WIDTH,
 )
 
-RESIZE_MARGIN = 9
+RESIZE_MARGIN = 12
 TITLE_BAR_DRAG_HEIGHT = 44
 
 

@@ -296,53 +296,72 @@ def download_update(
     dest_dir: Path,
     latest_version: str,
     progress_callback: Optional[Callable[[int, int], None]] = None,
-) -> Optional[Path]:
+) -> tuple[Optional[Path], str]:
+    """Download the update installer. Returns (path, error_msg).
+
+    error_msg is empty on success. Tries Python SSL first (with one retry),
+    then falls back to PowerShell Invoke-WebRequest on Windows.
+    """
     dest_dir.mkdir(parents=True, exist_ok=True)
     ext = _PLATFORM_EXT
     dest_path = dest_dir / f"Nudge_{latest_version}{ext}"
+    last_err = ""
 
+    # --- attempt 1 & 2: Python urllib (with one retry on SSL/redirect) ---
     ctx = _get_ssl_context()
     if ctx is not None:
+        for attempt in range(2):
+            try:
+                from urllib.request import Request, urlopen
+                req = Request(download_url, headers={"User-Agent": "Nudge/1.0"})
+                with urlopen(req, timeout=60, context=ctx) as resp:
+                    try:
+                        total = int(resp.headers.get("Content-Length", 0) or 0)
+                    except (ValueError, TypeError):
+                        total = 0
+                    downloaded = 0
+                    with open(dest_path, "wb") as f:
+                        while True:
+                            chunk = resp.read(65536)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if progress_callback:
+                                progress_callback(downloaded, total)
+                return (dest_path, "")
+            except (URLError, HTTPError, OSError) as exc:
+                last_err = f"{type(exc).__name__}: {exc}"
+                logging.warning(
+                    "Download attempt %d failed: %s", attempt + 1, last_err,
+                )
+                if dest_path.exists():
+                    dest_path.unlink()
+                if attempt == 0:
+                    import time
+                    time.sleep(1)
+
+    # --- fallback: PowerShell (works when _ssl DLL is broken) ---
+    if is_windows():
         try:
-            from urllib.request import Request, urlopen
-            req = Request(download_url, headers={"User-Agent": "Nudge/1.0"})
-            with urlopen(req, timeout=60, context=ctx) as resp:
-                try:
-                    total = int(resp.headers.get("Content-Length", 0) or 0)
-                except (ValueError, TypeError):
-                    total = 0
-                downloaded = 0
-                with open(dest_path, "wb") as f:
-                    while True:
-                        chunk = resp.read(65536)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        if progress_callback:
-                            progress_callback(downloaded, total)
-            return dest_path
-        except (URLError, HTTPError, OSError) as exc:
-            logging.error("Download failed: %s: %s", type(exc).__name__, exc)
+            logging.info("Trying PowerShell fallback download")
+            _ps_download(download_url, dest_path, timeout=120)
+            return (dest_path, "")
+        except Exception as exc:
+            last_err = f"PowerShell fallback: {type(exc).__name__}: {exc}"
+            logging.error("PowerShell download failed: %s", last_err)
             if dest_path.exists():
                 dest_path.unlink()
-            return None
-    # Fallback via PowerShell when _ssl DLL is broken
-    try:
-        _ps_download(download_url, dest_path, timeout=120)
-        return dest_path
-    except Exception as exc:
-        logging.error("PowerShell download failed: %s: %s", type(exc).__name__, exc)
-        if dest_path.exists():
-            dest_path.unlink()
-        return None
+
+    return (None, last_err or "Unknown download error")
 
 
 def perform_update(download_url: str, latest_version: str) -> bool:
     current_exe = Path(sys.executable)
     temp_dir = Path(tempfile.gettempdir()) / "Nudge_update"
-    downloaded = download_update(download_url, temp_dir, latest_version)
+    downloaded, err = download_update(download_url, temp_dir, latest_version)
     if downloaded is None:
+        logging.error("Update download failed: %s", err)
         return False
     return _install_update(downloaded, current_exe)
 
