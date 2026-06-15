@@ -1041,6 +1041,11 @@ class SettingsDialog(QDialog):
         self.pin_cb.toggled.connect(self._on_pin_to_desktop_toggled)
         self.always_on_top_cb.toggled.connect(self._on_always_on_top_toggled)
 
+        mutual_excl_note = QLabel("These options are mutually exclusive.")
+        mutual_excl_note.setStyleSheet("opacity: 0.6; font-size: 11px; font-style: italic;")
+        mutual_excl_note.setContentsMargins(0, 0, 0, 4)
+        general_layout.addWidget(mutual_excl_note)
+
         self.check_updates_cb = self._create_checkbox_row("Check for updates at startup", self.state_manager.state.get("checkForUpdates", True))
         general_layout.addWidget(self.check_updates_cb)
 
@@ -1077,6 +1082,7 @@ class SettingsDialog(QDialog):
         self.theme_combo = QComboBox()
         self.theme_combo.addItem("Dark", "dark")
         self.theme_combo.addItem("Light", "light")
+        self.theme_combo.addItem("OLED", "oled")
         saved_theme = normalize_theme_id(self.state_manager.state.get("theme", "dark"))
         theme_index = self.theme_combo.findData(saved_theme)
         self.theme_combo.setCurrentIndex(theme_index if theme_index >= 0 else 0)
@@ -1123,9 +1129,9 @@ class SettingsDialog(QDialog):
         appearance_layout.addLayout(opacity_row)
 
         self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
-        self.opacity_slider.setMinimum(50)
+        self.opacity_slider.setMinimum(30)
         self.opacity_slider.setMaximum(100)
-        current_opacity = int(self.state_manager.state.get("opacity", 1.0) * 100)
+        current_opacity = max(30, int(self.state_manager.state.get("opacity", 1.0) * 100))
         self.opacity_slider.setValue(current_opacity)
         self.opacity_slider.valueChanged.connect(self._on_opacity_changed)
         self.opacity_slider.valueChanged.connect(self._mark_dirty)
@@ -2291,12 +2297,50 @@ class MainWindow(QMainWindow):
         self.scroll_area.setWidget(self.tasks_widget)
         layout.addWidget(self.scroll_area, stretch=1)
 
+        # Empty state widget (shown when no tasks)
+        self._empty_state_widget = QWidget()
+        empty_layout = QVBoxLayout(self._empty_state_widget)
+        empty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.setSpacing(8)
+
+        self._empty_state_label = QLabel("Add a task to get started")
+        self._empty_state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_state_label.setStyleSheet("opacity: 0.5; font-size: 14px;")
+        empty_layout.addWidget(self._empty_state_label)
+
+        self._empty_state_arrow = QLabel("\u2193")
+        self._empty_state_arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_state_arrow.setStyleSheet("font-size: 24px; opacity: 0.4;")
+        empty_layout.addWidget(self._empty_state_arrow)
+
+        self._empty_state_timer = QTimer(self)
+        self._empty_state_timer.timeout.connect(self._animate_empty_arrow)
+        self._empty_state_arrow_visible = True
+
+        layout.addWidget(self._empty_state_widget)
+        self._empty_state_widget.hide()
+
         layout.setContentsMargins(15, 15, 15, 15)
 
         self.setCentralWidget(central_widget)
         self._enable_resize_hover_tracking(central_widget)
         # Let the glass panel and task list grow when the user resizes the window.
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+    def _animate_empty_arrow(self):
+        self._empty_state_arrow_visible = not self._empty_state_arrow_visible
+        self._empty_state_arrow.setStyleSheet(
+            f"font-size: 24px; opacity: {'0.4' if self._empty_state_arrow_visible else '0.15'};"
+        )
+
+    def _update_empty_state(self):
+        has_tasks = len(self.tasks) > 0
+        self._empty_state_widget.setVisible(not has_tasks)
+        self.scroll_area.setVisible(has_tasks)
+        if not has_tasks:
+            self._empty_state_timer.start(800)
+        else:
+            self._empty_state_timer.stop()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -2655,6 +2699,7 @@ class MainWindow(QMainWindow):
         self._sync_task_list_viewport_width()
         self._sync_task_row_text_layouts()
         self.tasks_widget.setUpdatesEnabled(True)
+        self._update_empty_state()
         import gc; gc.collect()
 
         central = self.centralWidget()
@@ -2716,6 +2761,7 @@ class MainWindow(QMainWindow):
             row.setParent(None)
             row.deleteLater()
         self._sync_task_list_viewport_width()
+        self._update_empty_state()
 
     def _style_context_menu(self, menu: QMenu) -> None:
         theme_id = normalize_theme_id(self.app_state.get("theme", "dark"))

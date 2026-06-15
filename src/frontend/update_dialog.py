@@ -322,7 +322,7 @@ class DownloadDialog(QDialog):
                 background: transparent;
             }}
             QProgressBar {{
-                background: rgba(255,255,255,15);
+                background: {muted};
                 border: 1px solid {border};
                 border-radius: 6px;
                 text-align: center;
