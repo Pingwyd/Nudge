@@ -3358,15 +3358,15 @@ class MainWindow(QMainWindow):
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Set Reminder \u2014 Nudge")
-        dlg.resize(420, 260)
-        dlg.setMinimumSize(380, 240)
+        dlg.resize(420, 320)
+        dlg.setMinimumSize(380, 280)
         dlg.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         dlg.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         dlg._drag_pos = None
 
         frame = QFrame(dlg)
         frame.setObjectName("glassPanel")
-        frame.setGeometry(0, 0, 420, 260)
+        frame.setGeometry(0, 0, 420, 320)
 
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(18, 16, 18, 14)
@@ -3375,6 +3375,19 @@ class MainWindow(QMainWindow):
         title = QLabel("Set Reminder")
         title.setStyleSheet("font-weight: bold; font-size: 13px;")
         layout.addWidget(title)
+
+        # -- Current reminder label (6.1: read-only display of existing reminder) --
+        current_reminder_label = None
+        existing_reminder_at = task_ref.get("reminderAt")
+        if existing_reminder_at:
+            try:
+                existing_dt = datetime.fromisoformat(existing_reminder_at)
+                current_reminder_label = QLabel(f"Current reminder: {existing_dt.strftime('%A, %d %b %Y at %H:%M')}")
+                current_reminder_label.setStyleSheet("font-size: 11px; color: rgba(255,255,255,120); font-style: italic;")
+                current_reminder_label.setWordWrap(True)
+                layout.addWidget(current_reminder_label)
+            except (ValueError, TypeError):
+                pass
 
         # -- Quick presets row --
         presets_label = QLabel("Quick set:")
@@ -3394,9 +3407,10 @@ class MainWindow(QMainWindow):
         duration_row.addWidget(duration_apply)
         layout.addLayout(duration_row)
 
-        duration_hint = QLabel("Format: number + unit (m = min, h = hours, d = days)")
-        duration_hint.setStyleSheet("font-size: 10px; color: rgba(255,255,255,100);")
-        layout.addWidget(duration_hint)
+        # 6.3: Explanatory label for quick-set
+        quickset_hint = QLabel("Type a shortcut or use the pickers above \u2014 both update together.")
+        quickset_hint.setStyleSheet("font-size: 10px; color: rgba(255,255,255,100);")
+        layout.addWidget(quickset_hint)
 
         # -- Date and time row --
         dt_label = QLabel("When:")
@@ -3406,21 +3420,45 @@ class MainWindow(QMainWindow):
         dt_row = QHBoxLayout()
         dt_row.setSpacing(8)
 
-        tomorrow = QDate.currentDate().addDays(1)
-        date_edit = QDateEdit(tomorrow)
+        # 6.1: Pre-populate with existing reminder or default to tomorrow 9:00 AM
+        if existing_reminder_at:
+            try:
+                existing_dt = datetime.fromisoformat(existing_reminder_at)
+                initial_date = QDate(existing_dt.year, existing_dt.month, existing_dt.day)
+                initial_time = QTime(existing_dt.hour, existing_dt.minute)
+            except (ValueError, TypeError):
+                initial_date = QDate.currentDate().addDays(1)
+                initial_time = QTime(9, 0)
+        else:
+            initial_date = QDate.currentDate().addDays(1)
+            initial_time = QTime(9, 0)
+
+        date_edit = QDateEdit(initial_date)
         date_edit.setCalendarPopup(True)
         date_edit.setDisplayFormat("MMM d, yyyy")
         date_edit.setMinimumDate(QDate.currentDate())
         date_edit.setMinimumWidth(130)
         dt_row.addWidget(date_edit)
 
-        time_edit = QTimeEdit(QTime(9, 0))
+        time_edit = QTimeEdit(initial_time)
         time_edit.setDisplayFormat("hh:mm AP")
         time_edit.setMinimumWidth(90)
         dt_row.addWidget(time_edit)
 
         dt_row.addStretch()
         layout.addLayout(dt_row)
+
+        # 6.2: Live preview label
+        preview_label = QLabel()
+        preview_label.setStyleSheet("font-size: 11px; color: rgba(255,255,255,180); font-weight: 500;")
+        preview_label.setWordWrap(True)
+        layout.addWidget(preview_label)
+
+        # 6.2: Confirmation label (initially hidden)
+        confirm_label = QLabel()
+        confirm_label.setStyleSheet("font-size: 11px; color: #4ade80; font-weight: 600;")
+        confirm_label.hide()
+        layout.addWidget(confirm_label)
 
         # -- Repeat section --
         repeat_row = QHBoxLayout()
@@ -3459,6 +3497,18 @@ class MainWindow(QMainWindow):
         btn_row.addWidget(set_btn)
         layout.addLayout(btn_row)
 
+        # 6.2: Update preview label function
+        def _update_preview():
+            q_date = date_edit.date()
+            q_time = time_edit.time()
+            target = datetime(q_date.year(), q_date.month(), q_date.day(),
+                              q_time.hour(), q_time.minute())
+            preview_label.setText(f"Will remind at: {target.strftime('%A, %d %b %Y at %H:%M')}")
+
+        date_edit.dateChanged.connect(lambda _: _update_preview())
+        time_edit.timeChanged.connect(lambda _: _update_preview())
+        _update_preview()
+
         # -- Duration input handler --
         import re as _re
 
@@ -3480,7 +3530,10 @@ class MainWindow(QMainWindow):
             target = datetime.now() + delta
             date_edit.setDate(QDate(target.year, target.month, target.day))
             time_edit.setTime(QTime(target.hour, target.minute))
+            _update_preview()
 
+        # 6.3: Real-time sync from quick-set input to pickers
+        duration_input.textChanged.connect(lambda _: _parse_duration())
         duration_apply.clicked.connect(_parse_duration)
         duration_input.returnPressed.connect(_parse_duration)
 
