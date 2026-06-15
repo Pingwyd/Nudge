@@ -371,6 +371,9 @@ def download_update(
 
 
 def perform_update(download_url: str, latest_version: str) -> bool:
+    if not getattr(sys, "frozen", False):
+        logging.warning("Not a frozen app — skipping update install (dev mode)")
+        return True
     current_exe = Path(sys.executable)
     temp_dir = Path(tempfile.gettempdir()) / "Nudge_update"
     downloaded, err = download_update(download_url, temp_dir, latest_version)

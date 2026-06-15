@@ -263,26 +263,30 @@ class DownloadDialog(QDialog):
 
     def _on_finished(self, success: bool, error_msg: str = ""):
         if success:
-            self.cancel_btn.setEnabled(False)
-            self.status_label.setText("Download complete! Installing...")
-            self.progress_bar.setValue(100)
             from pathlib import Path
             import tempfile, sys
-            from src.backend.updater import _install_update, _PLATFORM_EXT
-            temp_dir = Path(tempfile.gettempdir()) / "Nudge_update"
-            asset_name = f"Nudge_{self.latest_version}{_PLATFORM_EXT}"
-            downloaded = temp_dir / asset_name
-            current_exe = Path(sys.executable)
-            _install_update(downloaded, current_exe)
-            self.accept()
-            from PyQt6.QtWidgets import QApplication
-            from src.frontend.main_window import MainWindow
-            for w in QApplication.topLevelWindows():
-                if isinstance(w, MainWindow):
-                    w._skip_close_confirm = True
-                    w._force_quit = True
-                    w.close()
-                    break
+            self.progress_bar.setValue(100)
+            if getattr(sys, "frozen", False):
+                self.cancel_btn.setEnabled(False)
+                self.status_label.setText("Download complete! Installing...")
+                from src.backend.updater import _install_update, _PLATFORM_EXT
+                temp_dir = Path(tempfile.gettempdir()) / "Nudge_update"
+                asset_name = f"Nudge_{self.latest_version}{_PLATFORM_EXT}"
+                downloaded = temp_dir / asset_name
+                current_exe = Path(sys.executable)
+                _install_update(downloaded, current_exe)
+                self.accept()
+                from PyQt6.QtWidgets import QApplication
+                from src.frontend.main_window import MainWindow
+                for w in QApplication.topLevelWindows():
+                    if isinstance(w, MainWindow):
+                        w._skip_close_confirm = True
+                        w._force_quit = True
+                        w.close()
+                        break
+            else:
+                self.status_label.setText("Downloaded (dev mode)")
+                self.cancel_btn.setText("Close")
         else:
             self.cancel_btn.setText("Close")
             detail = error_msg or "Download failed. Please try again later."
