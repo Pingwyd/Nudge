@@ -79,9 +79,9 @@ class ThemedMessageDialog(QDialog):
         self._buttons = []
         for i, label in enumerate(buttons):
             btn = QPushButton(label)
-            btn.setObjectName("primaryButton")
-            btn.setFixedHeight(32)
-            btn.setMinimumWidth(80)
+            btn.setObjectName("ghostButton")
+            btn.setFixedHeight(28)
+            btn.setMinimumWidth(70)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(lambda checked, idx=i: self._on_button_clicked(idx))
             self._buttons.append(btn)

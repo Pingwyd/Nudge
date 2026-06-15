@@ -3245,7 +3245,7 @@ class MainWindow(QMainWindow):
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Set Reminder \u2014 Nudge")
-        dlg.resize(440, 280)
+        dlg.resize(420, 260)
         dlg.setMinimumSize(380, 240)
         dlg.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         dlg.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -3253,14 +3253,14 @@ class MainWindow(QMainWindow):
 
         frame = QFrame(dlg)
         frame.setObjectName("glassPanel")
-        frame.setGeometry(0, 0, 440, 280)
+        frame.setGeometry(0, 0, 420, 260)
 
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(8)
+        layout.setContentsMargins(18, 16, 18, 14)
+        layout.setSpacing(6)
 
         title = QLabel("Set Reminder")
-        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        title.setStyleSheet("font-weight: bold; font-size: 13px;")
         layout.addWidget(title)
 
         # -- Quick presets row --
@@ -3269,20 +3269,20 @@ class MainWindow(QMainWindow):
         layout.addWidget(presets_label)
 
         duration_row = QHBoxLayout()
-        duration_row.setSpacing(8)
+        duration_row.setSpacing(6)
         duration_input = QLineEdit()
         duration_input.setPlaceholderText("e.g. 25 minutes, 2 hours, 3 days...")
-        duration_input.setMinimumWidth(200)
+        duration_input.setMinimumWidth(180)
         duration_row.addWidget(duration_input, 1)
         duration_apply = QPushButton("Set")
-        duration_apply.setObjectName("primaryButton")
+        duration_apply.setObjectName("ghostButton")
         duration_apply.setCursor(Qt.CursorShape.PointingHandCursor)
-        duration_apply.setFixedWidth(50)
+        duration_apply.setFixedSize(50, 26)
         duration_row.addWidget(duration_apply)
         layout.addLayout(duration_row)
 
         duration_hint = QLabel("Format: number + unit (m = min, h = hours, d = days)")
-        duration_hint.setStyleSheet("font-size: 11px; color: rgba(255,255,255,120);")
+        duration_hint.setStyleSheet("font-size: 10px; color: rgba(255,255,255,100);")
         layout.addWidget(duration_hint)
 
         # -- Date and time row --
@@ -3291,33 +3291,35 @@ class MainWindow(QMainWindow):
         layout.addWidget(dt_label)
 
         dt_row = QHBoxLayout()
-        dt_row.setSpacing(10)
+        dt_row.setSpacing(8)
 
         tomorrow = QDate.currentDate().addDays(1)
         date_edit = QDateEdit(tomorrow)
         date_edit.setCalendarPopup(True)
         date_edit.setDisplayFormat("MMM d, yyyy")
         date_edit.setMinimumDate(QDate.currentDate())
-        date_edit.setMinimumWidth(140)
+        date_edit.setMinimumWidth(130)
         dt_row.addWidget(date_edit)
 
         time_edit = QTimeEdit(QTime(9, 0))
         time_edit.setDisplayFormat("hh:mm AP")
-        time_edit.setMinimumWidth(100)
+        time_edit.setMinimumWidth(90)
         dt_row.addWidget(time_edit)
 
         dt_row.addStretch()
         layout.addLayout(dt_row)
 
         # -- Repeat section --
-        repeat_cb = QCheckBox("Repeat every")
-        layout.addWidget(repeat_cb)
-
         repeat_row = QHBoxLayout()
+        repeat_row.setSpacing(6)
+        repeat_cb = QCheckBox("Repeat every")
+        repeat_row.addWidget(repeat_cb)
+
         repeat_spin = QSpinBox()
         repeat_spin.setRange(1, 1440)
         repeat_spin.setValue(30)
         repeat_spin.setSuffix(" min")
+        repeat_spin.setFixedWidth(90)
         repeat_spin.setEnabled(False)
         repeat_cb.toggled.connect(repeat_spin.setEnabled)
         repeat_row.addWidget(repeat_spin)
@@ -3328,16 +3330,18 @@ class MainWindow(QMainWindow):
 
         # -- Button row --
         btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
+        btn_row.setSpacing(12)
         btn_row.addStretch()
         cancel_btn = QPushButton("Cancel")
-        cancel_btn.setObjectName("primaryButton")
+        cancel_btn.setObjectName("ghostButton")
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_btn.setFixedHeight(28)
         cancel_btn.clicked.connect(dlg.reject)
         btn_row.addWidget(cancel_btn)
         set_btn = QPushButton("Set")
         set_btn.setObjectName("primaryButton")
         set_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        set_btn.setFixedHeight(28)
         set_btn.clicked.connect(dlg.accept)
         btn_row.addWidget(set_btn)
         layout.addLayout(btn_row)
