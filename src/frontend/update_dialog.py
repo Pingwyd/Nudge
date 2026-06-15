@@ -100,7 +100,7 @@ class UpdateInfoDialog(QDialog):
 
         btn_row = QHBoxLayout()
         later_btn = QPushButton("Remind Me Later")
-        later_btn.setObjectName("primaryButton")
+        later_btn.setObjectName("ghostButton")
         later_btn.clicked.connect(self.reject)
         btn_row.addWidget(later_btn)
 

@@ -464,17 +464,20 @@ class TaskRowWidget(QWidget):
     def mouseReleaseEvent(self, event):
         if self._editing:
             return super().mouseReleaseEvent(event)
-        if event.button() == Qt.MouseButton.LeftButton and self._drag_start_pos is not None:
-            pos = event.position().toPoint()
-            clicked_child = self.childAt(pos)
+        self._drag_start_pos = None
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if self._editing:
+            return super().mouseDoubleClickEvent(event)
+        if event.button() == Qt.MouseButton.LeftButton:
+            clicked_child = self.childAt(event.position().toPoint())
             if clicked_child not in (self.edit_btn, self.editor):
                 if self.on_toggled:
                     self.on_toggled(True)
                 event.accept()
-                self._drag_start_pos = None
                 return
-        self._drag_start_pos = None
-        super().mouseReleaseEvent(event)
+        super().mouseDoubleClickEvent(event)
 
     def contextMenuEventFromChild(self, global_pos):
         if self.on_context_menu:
@@ -486,6 +489,91 @@ class TaskRowWidget(QWidget):
             event.accept()
             return
         super().contextMenuEvent(event)
+
+
+class UndoToast(QFrame):
+    """Non-blocking toast that auto-dismisses after a timeout, with an Undo button."""
+
+    def __init__(self, parent, message, undo_callback, timeout_ms=5000):
+        super().__init__(parent)
+        self._undo_callback = undo_callback
+        self.setObjectName("undoToast")
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.Tool
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(14, 8, 14, 8)
+        layout.setSpacing(10)
+
+        msg_label = QLabel(message)
+        layout.addWidget(msg_label)
+
+        undo_btn = QPushButton("Undo")
+        undo_btn.setObjectName("ghostButton")
+        undo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        undo_btn.clicked.connect(self._on_undo)
+        layout.addWidget(undo_btn)
+
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(timeout_ms)
+        self._timer.timeout.connect(self._dismiss)
+        self._timer.start()
+
+    def _on_undo(self):
+        if self._undo_callback:
+            self._undo_callback()
+        self._dismiss()
+
+    def _dismiss(self):
+        if self._timer.isActive():
+            self._timer.stop()
+        self.hide()
+        self.deleteLater()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._apply_theme()
+        self._position_near_parent()
+
+    def _apply_theme(self):
+        parent = self.parent()
+        theme_id = "dark"
+        if parent and hasattr(parent, "app_state"):
+            theme_id = normalize_theme_id(parent.app_state.get("theme", "dark"))
+        theme = get_theme(theme_id)
+        c = theme["colors"]
+        self.setStyleSheet(f"""
+            QFrame#undoToast {{
+                background: {c.get('surface', '#1e1e2e')};
+                border: 1px solid {c.get('border', 'rgba(255,255,255,25)')};
+                border-radius: 12px;
+            }}
+            QLabel {{
+                color: {c.get('text', '#e0e0e0')};
+                font-size: 13px;
+            }}
+            QPushButton {{
+                color: {c.get('accent', '#7aa2f7')};
+                font-weight: bold;
+                font-size: 13px;
+                border: none;
+                background: transparent;
+            }}
+        """)
+
+    def _position_near_parent(self):
+        parent = self.parent()
+        if parent is None:
+            return
+        self.adjustSize()
+        pw = parent.width()
+        self.move(10, parent.height() - self.height() - 10)
 
 
 class HistoryDialog(QDialog):
@@ -1646,6 +1734,7 @@ class SettingsDialog(QDialog):
                 self,
                 "Unsaved Changes",
                 "You have unsaved changes, do you want to save them?",
+                default_yes=False,
             ):
                 if not self.save_changes():
                     event.ignore()
@@ -1705,6 +1794,7 @@ class MainWindow(QMainWindow):
         self._escape_timer = QTimer(self)
         self._escape_timer.setSingleShot(True)
         self._escape_timer.timeout.connect(lambda: setattr(self, '_escape_count', 0))
+        self._last_archived_task = None
 
         self._hotkey_filter = GlobalHotkeyFilter()
         QApplication.instance().installNativeEventFilter(self._hotkey_filter)
@@ -2437,7 +2527,7 @@ class MainWindow(QMainWindow):
         message = f"Delete group \"{group['name']}\"?"
         if count:
             message += f"\n{count} task(s) will move to General."
-        if not ThemedMessageDialog.question(self, "Delete Group", message):
+        if not ThemedMessageDialog.question(self, "Delete Group", message, default_yes=False):
             return
         for task in self.tasks:
             if task.get("groupId") == group_id:
@@ -2925,6 +3015,20 @@ class MainWindow(QMainWindow):
         self._remove_task_row_widget(task_ref)
         if self._history_dialog is not None:
             self._history_dialog.add_external_archived_task(archived_task)
+
+        self._last_archived_task = archived_task
+        self._show_undo_toast(task_ref.get("text", "Task"))
+
+    def _show_undo_toast(self, task_text):
+        toast = UndoToast(self, f"Completed: {task_text}", self._undo_last_archive)
+        toast.show()
+
+    def _undo_last_archive(self):
+        task = self._last_archived_task
+        if task is None:
+            return
+        self._last_archived_task = None
+        self.restore_task_from_history(task)
 
     def migrate_completed_tasks_to_history(self):
         completed = [task for task in self.tasks if task.get("done", False)]
