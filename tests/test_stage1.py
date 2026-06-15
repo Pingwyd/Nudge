@@ -84,3 +84,53 @@ def test_focusout_event_closes_not_accepts(qapp_instance):
     # close() sets result to Rejected (0), accept() would set Accepted (1)
     assert dlg.result() != 1
     dlg.close()
+
+
+# ── 1.4 Period-Split Parser ───────────────────────────────────────────
+
+def test_period_split_sentences():
+    """Period-space splits into separate tasks."""
+    from src.backend.input_parser import InputParser
+    tasks = InputParser.parse_input("Buy eggs. Get milk.")
+    assert len(tasks) == 2
+    assert tasks[0]["text"] == "Buy eggs"
+    assert tasks[1]["text"] == "Get milk"
+
+
+def test_period_split_abbreviation():
+    """Abbreviation like Dr. should not split."""
+    from src.backend.input_parser import InputParser
+    tasks = InputParser.parse_input("Dr. Smith buys eggs.")
+    assert len(tasks) == 1
+    assert tasks[0]["text"] == "Dr. Smith buys eggs"
+
+
+def test_period_split_ellipsis():
+    """Ellipsis (...) should not split."""
+    from src.backend.input_parser import InputParser
+    tasks = InputParser.parse_input("Wait... then go home.")
+    assert len(tasks) == 1
+    assert tasks[0]["text"] == "Wait... then go home"
+
+
+def test_period_split_decimal():
+    """Decimal like 3.14 should not split."""
+    from src.backend.input_parser import InputParser
+    tasks = InputParser.parse_input("Value is 3.14.")
+    assert len(tasks) == 1
+    assert tasks[0]["text"] == "Value is 3.14"
+
+
+def test_period_split_empty():
+    """Empty input returns empty list."""
+    from src.backend.input_parser import InputParser
+    assert InputParser.parse_input("") == []
+    assert InputParser.parse_input("   ") == []
+
+
+def test_period_split_single():
+    """Single sentence without period."""
+    from src.backend.input_parser import InputParser
+    tasks = InputParser.parse_input("Buy eggs")
+    assert len(tasks) == 1
+    assert tasks[0]["text"] == "Buy eggs"
