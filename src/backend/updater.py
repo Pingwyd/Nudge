@@ -228,6 +228,20 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
         "  \u2022 \u201cAlways on Top\u201d / \u201cPin to Desktop\u201d now work immediately after saving, no restart needed\n"
         "  \u2022 Info dialogs (like \u201cYou\u2019re up to date\u201d) no longer block the app \u2014 click outside to close"
     ),
+    "1.6.1": (
+        "\ud83d\udce6 Improvements\n"
+        "  \u2022 History window is now resizable \u2014 drag any edge or corner\n"
+        "  \u2022 Settings window is now resizable and remembers its size\n"
+        "  \u2022 History window remembers its size between sessions\n"
+        "  \u2022 Main window starts smaller (300\u00d7300) for a compact widget feel\n"
+        "  \u2022 Update download now retries once and falls back to PowerShell if SSL fails\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Settings sidebar text no longer clipped (sidebar button size fixed)\n"
+        "  \u2022 Glass panels are more opaque \u2014 no more text bleeding through from behind\n"
+        "  \u2022 \u201cYou\u2019re up to date\u201d popup is more compact (350\u00d7150)\n"
+        "  \u2022 Update download no longer silently fails on SSL errors \u2014 shows the real error"
+    ),
 }
 
 
