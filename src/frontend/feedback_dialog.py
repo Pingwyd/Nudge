@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src import __version__
 from src.backend.icon import get_app_icon
 from src.frontend.theme import (
     get_theme,
@@ -158,7 +159,7 @@ class FeedbackDialog(QDialog):
         self.open_btn.setFixedSize(110, 32)
         self.open_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.open_btn.setDefault(True)
-        self.open_btn.clicked.connect(self.accept)
+        self.open_btn.clicked.connect(self._send_feedback)
         button_row.addWidget(self.open_btn)
 
         layout.addLayout(button_row)
@@ -186,6 +187,25 @@ class FeedbackDialog(QDialog):
         self._copy_btn.setText("Copied!")
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(1200, lambda: self._copy_btn.setText(original))
+
+    def _send_feedback(self) -> None:
+        from urllib.parse import quote
+        from src.os_layer.platform_utils import open_url
+
+        text = self.feedback_text()
+        if not text:
+            return
+        subject = f"Nudge Feedback v{__version__}"
+        gmail_uri = (
+            f"https://mail.google.com/mail/u/0/?view=cm&fs=1"
+            f"&to=nudgefeedback@gmail.com"
+            f"&su={quote(subject)}"
+            f"&body={quote(text)}"
+        )
+        opened = open_url(gmail_uri)
+        if opened:
+            QApplication.clipboard().setText(text)
+        self.accept()
 
     def feedback_text(self) -> str:
         return self.input_edit.toPlainText().strip()
