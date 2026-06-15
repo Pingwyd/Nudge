@@ -43,6 +43,7 @@ DARK_THEME: Dict[str, Any] = {
         "danger_bg": "rgba(255, 50, 50, 40)",
         "danger_border": "rgba(255, 50, 50, 80)",
         "danger_hover": "rgba(255, 50, 50, 70)",
+        "danger_text": "#ff5555",
         "scrollbar": "rgba(255, 255, 255, 80)",
         "scrollbar_track": "rgba(255, 255, 255, 14)",
         "tooltip_bg": "rgba(30, 30, 30, 240)",
@@ -98,6 +99,7 @@ LIGHT_THEME: Dict[str, Any] = {
         "danger_bg": "rgba(255, 80, 80, 55)",
         "danger_border": "rgba(200, 40, 40, 90)",
         "danger_hover": "rgba(255, 80, 80, 90)",
+        "danger_text": "#c82828",
         "scrollbar": "rgba(0, 0, 0, 45)",
         "scrollbar_track": "rgba(0, 0, 0, 10)",
         "tooltip_bg": "rgba(252, 252, 255, 250)",
@@ -308,6 +310,12 @@ def menu_stylesheet(theme: Dict[str, Any]) -> str:
         }}
         QMenu::item:selected {{
             background-color: {_c(theme, "hover")};
+        }}
+        QMenu::item#deleteAction {{
+            color: {_c(theme, "danger_text")};
+        }}
+        QMenu::item#deleteAction:selected {{
+            background-color: {_c(theme, "danger_hover")};
         }}
         QMenu::separator {{
             height: 1px;

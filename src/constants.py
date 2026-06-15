@@ -157,7 +157,6 @@ ADD_GROUP_BTN_SIZE = (32, 28)
 REMINDER_LIST_TEXT_MAX = 60     # max chars in reminder list task name
 
 # Context menu
-CONTEXT_MENU_X_OFFSET = -80
 DIALOG_PLACEMENT_GAP = 15
 
 # ── Download / Network ────────────────────────────────────────────────
