@@ -158,7 +158,7 @@ class ThemedMessageDialog(QDialog):
 
     def focusOutEvent(self, event):
         super().focusOutEvent(event)
-        self.accept()
+        self.close()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:

@@ -65,3 +65,22 @@ def test_crash_dialog_is_frameless(qapp_instance):
     flags = dlg.windowFlags()
     assert Qt.WindowType.FramelessWindowHint & flags
     dlg.close()
+
+
+# ── 1.3 focusOutEvent Auto-Accept ─────────────────────────────────────
+
+def test_focusout_event_closes_not_accepts(qapp_instance):
+    """focusOutEvent should close() the dialog, not accept()."""
+    from src.frontend.themed_message_dialog import ThemedMessageDialog
+
+    dlg = ThemedMessageDialog(None, "Info", "Test message", icon_kind="info")
+    dlg.show()
+
+    from PyQt6.QtGui import QFocusEvent
+    from PyQt6.QtCore import Qt as Qt2
+    focus_event = QFocusEvent(QFocusEvent.Type.FocusOut)
+    dlg.focusOutEvent(focus_event)
+
+    # close() sets result to Rejected (0), accept() would set Accepted (1)
+    assert dlg.result() != 1
+    dlg.close()
