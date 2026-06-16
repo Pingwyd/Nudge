@@ -187,3 +187,78 @@ def file_filter_for_format(export_format: ExportFormat) -> Tuple[str, str]:
         "csv": ("CSV (*.csv)", ".csv"),
     }
     return filters[export_format]
+
+
+def run_export_with_dialog(
+    parent_widget,
+    main_window,
+    export_format: ExportFormat,
+    include_history: bool,
+    group_filter: dict[str, object] | None = None,
+    all_groups_checked: bool = True,
+) -> bool:
+    """
+    Run the export workflow with file dialog and confirmation.
+    
+    Returns True if export was successful, False otherwise.
+    """
+    from pathlib import Path
+    from PyQt6.QtWidgets import QFileDialog
+    from src.frontend.themed_message_dialog import ThemedMessageDialog
+    from src.os_layer.platform_utils import open_file_explorer
+
+    label, extension = file_filter_for_format(export_format)
+    last_dir = main_window.state_manager.state.get("lastExportDir", "")
+    initial = str(Path(last_dir) / f"tasks_export{extension}") if last_dir else f"tasks_export{extension}"
+    filepath, _ = QFileDialog.getSaveFileName(
+        parent_widget, "Export Tasks", initial, f"{label};;All Files (*.*)",
+    )
+    if not filepath:
+        return False
+
+    path = Path(filepath).resolve()
+    if path.suffix.lower() != extension:
+        path = path.with_suffix(extension)
+
+    # Filter tasks by group if needed
+    if group_filter and not all_groups_checked:
+        selected = {gid for gid, cb in group_filter.items() if cb.isChecked()}
+        if selected:
+            active_filtered = [t for t in main_window.tasks if t.get("groupId") in selected]
+            history_raw = main_window.history_store.load()
+            history_filtered = [t for t in history_raw if t.get("groupId") in selected]
+        else:
+            active_filtered = list(main_window.tasks)
+            history_filtered = main_window.history_store.load()
+    else:
+        active_filtered = list(main_window.tasks)
+        history_filtered = main_window.history_store.load()
+
+    request = ExportRequest(
+        filepath=path,
+        export_format=export_format,
+        include_history=include_history,
+        active_tasks=active_filtered,
+        history_tasks=history_filtered,
+        groups_doc=main_window.groups_data,
+    )
+
+    try:
+        export_to_file(request)
+    except OSError as error:
+        ThemedMessageDialog.warning(parent_widget, "Export Failed", f"Could not write file:\n{error}")
+        return False
+
+    main_window.state_manager.state["lastExportDir"] = str(path.parent)
+    main_window.state_manager.save()
+
+    if ThemedMessageDialog.question(
+        parent_widget,
+        "Export Complete",
+        f"Tasks exported successfully to:\n{path}\n\nDo you want to open the file location?",
+        yes_label="Open file location",
+        no_label="Close",
+    ):
+        open_file_explorer(str(path.parent))
+    
+    return True

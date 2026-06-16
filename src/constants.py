@@ -99,7 +99,7 @@ TRAY_MESSAGE_DURATION_MS = 3000
 
 # ── Slider Ranges ─────────────────────────────────────────────────────
 
-OPACITY_SLIDER_MIN = 50       # %
+OPACITY_SLIDER_MIN = 30       # %
 OPACITY_SLIDER_MAX = 100      # %
 OPACITY_FLOOR = 0.30          # minimum window opacity (float)
 OPACITY_DIVISOR = 100.0       # slider → float conversion
@@ -156,8 +156,10 @@ ADD_GROUP_BTN_SIZE = (32, 28)
 # Text truncation
 REMINDER_LIST_TEXT_MAX = 60     # max chars in reminder list task name
 
+# Feedback dialog
+FEEDBACK_MAX_CHARS = 1000
+
 # Context menu
-CONTEXT_MENU_X_OFFSET = -80
 DIALOG_PLACEMENT_GAP = 15
 
 # ── Download / Network ────────────────────────────────────────────────

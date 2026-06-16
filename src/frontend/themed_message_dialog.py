@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.backend.icon import get_app_icon
+from src.frontend.glass_panel_dialog import GlassPanelDialog
 from src.frontend.theme import (
     get_theme,
     glass_overlap_stylesheet,
@@ -30,7 +31,7 @@ from src.frontend.theme import (
 )
 
 
-class ThemedMessageDialog(QDialog):
+class ThemedMessageDialog(GlassPanelDialog):
     """Themed Yes/No/Ok-style dialog. Returns the index of the clicked button."""
 
     def __init__(
@@ -44,20 +45,15 @@ class ThemedMessageDialog(QDialog):
     ):
         super().__init__(parent)
         self._result_index = -1
-        self._drag_pos = None
         self._init_ui(title, message, list(buttons), default_index, icon_kind)
 
     def _init_ui(self, title, message, buttons, default_index, icon_kind):
         self.setWindowTitle(title)
         self.setWindowIcon(get_app_icon())
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         initial_w, initial_h = 350, 150
         self.resize(initial_w, initial_h)
 
-        self.bg_frame = QFrame(self)
-        self.bg_frame.setObjectName("glassPanel")
         self.bg_frame.setGeometry(0, 0, 350, 150)
 
         layout = QVBoxLayout(self.bg_frame)
@@ -100,7 +96,6 @@ class ThemedMessageDialog(QDialog):
         m = self.bg_frame.layout().contentsMargins()
         sp = self.bg_frame.layout().spacing()
 
-        # Measure the longest text line to pick a width that doesn't clip.
         longest = 0
         for label in (self._title_label, self._msg_label):
             fm = QFontMetrics(label.font())
@@ -111,54 +106,19 @@ class ThemedMessageDialog(QDialog):
 
         text_w = available_w - m.left() - m.right()
 
-        # Title height
         title_h = self._title_label.sizeHint().height()
 
-        # Message height wrapped to text_w
         fm = QFontMetrics(self._msg_label.font())
         bounds = fm.boundingRect(0, 0, text_w, 10000, int(Qt.TextFlag.TextWordWrap), self._msg_label.text())
 
-        # Buttons height
         btn_h = 32
 
         total_h = m.top() + title_h + sp + bounds.height() + 8 + sp + btn_h + m.bottom()
         self.resize(available_w, total_h)
 
-    def resizeEvent(self, event):
-        self.bg_frame.setGeometry(self.rect())
-        super().resizeEvent(event)
-
-    def moveEvent(self, event):
-        super().moveEvent(event)
-        self._update_overlap_opacity()
-
-    def _update_overlap_opacity(self):
-        parent = self.parent()
-        if parent is None or not isinstance(parent, QMainWindow):
-            return
-        overlap = self.frameGeometry().intersects(parent.frameGeometry())
-        if overlap:
-            theme_id = normalize_theme_id(parent.app_state.get("theme", "dark"))
-            theme = get_theme(theme_id)
-            self.bg_frame.setStyleSheet(glass_overlap_stylesheet(theme, radius=16))
-        else:
-            theme_id = normalize_theme_id(parent.app_state.get("theme", "dark"))
-            refresh_glass_shells(self, theme_id)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-
-    def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.MouseButton.LeftButton and self._drag_pos is not None:
-            self.move(self.pos() + event.globalPosition().toPoint() - self._drag_pos)
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-
     def focusOutEvent(self, event):
         super().focusOutEvent(event)
-        self.accept()
+        self.close()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:

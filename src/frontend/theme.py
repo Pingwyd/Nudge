@@ -43,6 +43,7 @@ DARK_THEME: Dict[str, Any] = {
         "danger_bg": "rgba(255, 50, 50, 40)",
         "danger_border": "rgba(255, 50, 50, 80)",
         "danger_hover": "rgba(255, 50, 50, 70)",
+        "danger_text": "#ff5555",
         "scrollbar": "rgba(255, 255, 255, 80)",
         "scrollbar_track": "rgba(255, 255, 255, 14)",
         "tooltip_bg": "rgba(30, 30, 30, 240)",
@@ -50,6 +51,8 @@ DARK_THEME: Dict[str, Any] = {
         "separator": "rgba(255, 255, 255, 35)",
         "drop_indicator": "rgba(255, 255, 255, 220)",
         "glass_overlap_solid": "rgba(18, 18, 18, 255)",
+        "accent": "#4fc3f7",
+        "muted": "#666666",
     },
     "radii": {
         "window": 20,
@@ -98,6 +101,7 @@ LIGHT_THEME: Dict[str, Any] = {
         "danger_bg": "rgba(255, 80, 80, 55)",
         "danger_border": "rgba(200, 40, 40, 90)",
         "danger_hover": "rgba(255, 80, 80, 90)",
+        "danger_text": "#c82828",
         "scrollbar": "rgba(0, 0, 0, 45)",
         "scrollbar_track": "rgba(0, 0, 0, 10)",
         "tooltip_bg": "rgba(252, 252, 255, 250)",
@@ -105,6 +109,53 @@ LIGHT_THEME: Dict[str, Any] = {
         "separator": "rgba(0, 0, 0, 40)",
         "drop_indicator": "rgba(44, 44, 46, 220)",
         "glass_overlap_solid": "rgba(248, 248, 250, 255)",
+        "accent": "#007AFF",
+        "muted": "#8e8e93",
+    },
+    "radii": deepcopy(DARK_THEME["radii"]),
+    "fonts": deepcopy(DARK_THEME["fonts"]),
+}
+
+# --- OLED theme tokens (pure black background for OLED displays) --------------------
+
+OLED_THEME: Dict[str, Any] = {
+    "id": "oled",
+    "colors": {
+        "text": "#ffffff",
+        "text_muted": "rgba(255, 255, 255, 160)",
+        "glass_start": "rgba(0, 0, 0, 255)",
+        "glass_end": "rgba(0, 0, 0, 255)",
+        "border": "rgba(255, 255, 255, 40)",
+        "border_highlight": "rgba(255, 255, 255, 70)",
+        "input_bg": "rgba(255, 255, 255, 20)",
+        "menu_bg": "rgba(0, 0, 0, 255)",
+        "menu_border": "rgba(255, 255, 255, 35)",
+        "hover": "rgba(255, 255, 255, 25)",
+        "hover_strong": "rgba(255, 255, 255, 35)",
+        "chrome_hover": "rgba(255, 255, 255, 20)",
+        "chrome_separator": "rgba(255, 255, 255, 18)",
+        "tab_bg": "rgba(255, 255, 255, 12)",
+        "tab_selected": "rgba(255, 255, 255, 30)",
+        "group_header_bg": "rgba(255, 255, 255, 10)",
+        "group_header_border": "rgba(255, 255, 255, 30)",
+        "group_header_hover": "rgba(255, 255, 255, 22)",
+        "accent_button_bg": "rgba(255, 255, 255, 18)",
+        "checkbox_indicator": "rgba(255, 255, 255, 25)",
+        "checkbox_checked": "rgba(255, 255, 255, 140)",
+        "checkbox_border": "rgba(255, 255, 255, 80)",
+        "danger_bg": "rgba(255, 40, 40, 35)",
+        "danger_border": "rgba(255, 40, 40, 70)",
+        "danger_hover": "rgba(255, 40, 40, 60)",
+        "danger_text": "#ff4444",
+        "scrollbar": "rgba(255, 255, 255, 60)",
+        "scrollbar_track": "rgba(255, 255, 255, 8)",
+        "tooltip_bg": "rgba(20, 20, 20, 245)",
+        "tooltip_border": "rgba(255, 255, 255, 50)",
+        "separator": "rgba(255, 255, 255, 25)",
+        "drop_indicator": "rgba(255, 255, 255, 200)",
+        "glass_overlap_solid": "rgba(0, 0, 0, 255)",
+        "accent": "#4fc3f7",
+        "muted": "#666666",
     },
     "radii": deepcopy(DARK_THEME["radii"]),
     "fonts": deepcopy(DARK_THEME["fonts"]),
@@ -113,6 +164,7 @@ LIGHT_THEME: Dict[str, Any] = {
 THEME_BY_ID: Dict[str, Dict[str, Any]] = {
     "dark": DARK_THEME,
     "light": LIGHT_THEME,
+    "oled": OLED_THEME,
 }
 
 
@@ -308,6 +360,12 @@ def menu_stylesheet(theme: Dict[str, Any]) -> str:
         }}
         QMenu::item:selected {{
             background-color: {_c(theme, "hover")};
+        }}
+        QMenu::item#deleteAction {{
+            color: {_c(theme, "danger_text")};
+        }}
+        QMenu::item#deleteAction:selected {{
+            background-color: {_c(theme, "danger_hover")};
         }}
         QMenu::separator {{
             height: 1px;

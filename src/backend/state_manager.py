@@ -47,6 +47,7 @@ class StateManager:
             "groupsEnabled": False,
             "lastExportDir": "",
             "checkForUpdates": True,
+            "showBootNotification": True,
             "updateCheckUrl": "https://api.github.com/repos/Pingwyd/Nudge/releases/latest",
             "lastSeenVersion": "",
             "lastChangelog": ""

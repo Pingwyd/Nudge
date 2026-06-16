@@ -5,9 +5,7 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
-    QDialog,
     QFormLayout,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -18,37 +16,33 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from src.frontend.theme import (
-    get_theme,
-    glass_overlap_stylesheet,
-    normalize_theme_id,
-    refresh_glass_shells,
-)
+from src.frontend.glass_panel_dialog import GlassPanelDialog
+from src.frontend.theme import normalize_theme_id
 
 
-class TimerDialog(QDialog):
+class TimerDialog(GlassPanelDialog):
     """Add, edit, enable/disable, and remove reminder timers."""
 
     def __init__(self, timer_manager, parent=None):
-        super().__init__(parent)
-        self._drag_pos = None
+        super().__init__(parent, escape_action="accept")
         self._timer_manager = timer_manager
 
         self.setWindowTitle("Reminders \u2014 Nudge")
         self.resize(480, 340)
         self.setMinimumSize(400, 280)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-
-        self._frame = QFrame(self)
-        self._frame.setObjectName("glassPanel")
 
         self._build_ui()
         self._refresh_list()
         self._update_overlap_opacity()
 
+    def _get_theme_id(self) -> str:
+        parent = self.parent()
+        if parent is None:
+            return normalize_theme_id(getattr(self, "app_state", {}).get("theme", "dark"))
+        return normalize_theme_id(getattr(parent, "app_state", {}).get("theme", "dark"))
+
     def _build_ui(self):
-        layout = QVBoxLayout(self._frame)
+        layout = QVBoxLayout(self.bg_frame)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
@@ -112,7 +106,7 @@ class TimerDialog(QDialog):
 
     def _add(self):
         dlg = _TimerEditDialog(self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
+        if dlg.exec() == dlg.DialogCode.Accepted:
             self._timer_manager.add(dlg.name(), dlg.interval(), dlg.repeat())
             self._refresh_list()
 
@@ -126,7 +120,7 @@ class TimerDialog(QDialog):
             return
         cfg = raw[0]
         dlg = _TimerEditDialog(self, name=cfg["name"], interval=cfg["intervalSeconds"], repeat=cfg["repeat"])
-        if dlg.exec() == QDialog.DialogCode.Accepted:
+        if dlg.exec() == dlg.DialogCode.Accepted:
             self._timer_manager.remove(tid)
             self._timer_manager.add(dlg.name(), dlg.interval(), dlg.repeat())
             self._refresh_list()
@@ -150,71 +144,22 @@ class TimerDialog(QDialog):
         self._timer_manager.remove(tid)
         self._refresh_list()
 
-    # -- Themed glass-panel boilerplate --
 
-    def resizeEvent(self, event):
-        self._frame.setGeometry(self.rect())
-        super().resizeEvent(event)
-
-    def moveEvent(self, event):
-        super().moveEvent(event)
-        self._update_overlap_opacity()
-
-    def _update_overlap_opacity(self):
-        parent = self.parent()
-        if parent is None:
-            theme_id = normalize_theme_id(getattr(self, "app_state", {}).get("theme", "dark"))
-            theme = get_theme(theme_id)
-            refresh_glass_shells(self, theme_id)
-            return
-        theme_id = normalize_theme_id(getattr(parent, "app_state", {}).get("theme", "dark"))
-        theme = get_theme(theme_id)
-        overlap = self.frameGeometry().intersects(parent.frameGeometry()) if hasattr(parent, "frameGeometry") else False
-        if overlap:
-            self._frame.setStyleSheet(glass_overlap_stylesheet(theme, radius=16))
-        else:
-            refresh_glass_shells(self, theme_id)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-
-    def mouseMoveEvent(self, event):
-        if self._drag_pos is not None and event.buttons() == Qt.MouseButton.LeftButton:
-            self.move(self.pos() + event.globalPosition().toPoint() - self._drag_pos)
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape:
-            self.accept()
-            event.accept()
-        else:
-            super().keyPressEvent(event)
-
-
-class _TimerEditDialog(QDialog):
+class _TimerEditDialog(GlassPanelDialog):
     """Inline form for adding or editing a single timer."""
 
     def __init__(self, parent=None, name="", interval=300, repeat=False):
-        super().__init__(parent)
-        self._drag_pos = None
+        super().__init__(parent, escape_action="reject")
 
         self.setWindowTitle("Edit Reminder \u2014 Nudge")
         self.resize(320, 200)
         self.setMinimumWidth(280)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-
-        self._frame = QFrame(self)
-        self._frame.setObjectName("glassPanel")
 
         self._build_ui(name, interval, repeat)
         self._update_overlap_opacity()
 
     def _build_ui(self, name, interval, repeat):
-        outer = QVBoxLayout(self._frame)
+        outer = QVBoxLayout(self.bg_frame)
         outer.setContentsMargins(18, 18, 18, 18)
         outer.setSpacing(10)
 
@@ -271,45 +216,8 @@ class _TimerEditDialog(QDialog):
     def repeat(self) -> bool:
         return self._repeat_cb.isChecked()
 
-    # -- Themed glass-panel boilerplate --
-
-    def resizeEvent(self, event):
-        self._frame.setGeometry(self.rect())
-        super().resizeEvent(event)
-
-    def moveEvent(self, event):
-        super().moveEvent(event)
-        self._update_overlap_opacity()
-
-    def _update_overlap_opacity(self):
-        parent = self.parent()
-        if parent is None:
-            refresh_glass_shells(self, "dark")
-            return
-        theme_id = normalize_theme_id(getattr(parent, "app_state", {}).get("theme", "dark"))
-        theme = get_theme(theme_id)
-        overlap = self.frameGeometry().intersects(parent.frameGeometry()) if hasattr(parent, "frameGeometry") else False
-        if overlap:
-            self._frame.setStyleSheet(glass_overlap_stylesheet(theme, radius=16))
-        else:
-            refresh_glass_shells(self, theme_id)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-
-    def mouseMoveEvent(self, event):
-        if self._drag_pos is not None and event.buttons() == Qt.MouseButton.LeftButton:
-            self.move(self.pos() + event.globalPosition().toPoint() - self._drag_pos)
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape:
-            self.reject()
-            event.accept()
-        elif event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             self.accept()
             event.accept()
         else:

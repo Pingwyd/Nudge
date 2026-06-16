@@ -150,15 +150,6 @@ def test_import_desktop_pin():
 # ── Frontend module imports (require QApplication) ────────────────────
 
 
-@pytest.fixture(scope="session")
-def qapp_instance():
-    """Shared QApplication for the test session."""
-    from PyQt6.QtWidgets import QApplication
-    import sys
-    app = QApplication.instance() or QApplication(sys.argv)
-    yield app
-
-
 def test_import_main_window(qapp_instance):
     from src.frontend.main_window import MainWindow
     assert MainWindow is not None
