@@ -10,12 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Literal, Tuple
 
-from src.backend.task_groups import (
-    GENERAL_GROUP_ID,
-    group_name,
-    sorted_groups,
-    tasks_for_group,
-)
+from src.backend.task_groups import (GENERAL_GROUP_ID, group_name,
+                                     sorted_groups, tasks_for_group)
 
 ExportFormat = Literal["txt", "md", "csv"]
 
@@ -180,6 +176,33 @@ def _build_csv(request: ExportRequest) -> str:
     return buffer.getvalue()
 
 
+def _prompt_retry_export(parent_widget, original_path: str, error_detail: str) -> str | None:
+    """Show a dialog asking the user to choose a new location or cancel.
+
+    # FIX-A2: returns new file path on retry, None on cancel.
+    Maximum 3 retries enforced by caller.
+    """
+    from PyQt6.QtWidgets import QFileDialog, QMessageBox
+    msg = QMessageBox(parent_widget)
+    msg.setWindowTitle("Export Failed")
+    msg.setText(f"Cannot write to:\n{original_path}")
+    msg.setInformativeText(f"Error: {error_detail}\n\nThe file may be open in another application.")
+    retry_btn = msg.addButton("Choose New Location", QMessageBox.ButtonRole.ActionRole)
+    cancel_btn = msg.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+    msg.setDefaultButton(cancel_btn)
+    msg.exec()
+    if msg.clickedButton() == retry_btn:
+        from pathlib import Path
+        label, _ = file_filter_for_format(Path(original_path).suffix.lstrip("."))
+        new_path, _ = QFileDialog.getSaveFileName(
+            parent_widget, "Export Tasks (new location)",
+            str(original_path), f"{label};;All Files (*.*)",
+            options=QFileDialog.Option.DontUseNativeDialog,  # FIX-C2
+        )
+        return new_path if new_path else None
+    return None
+
+
 def file_filter_for_format(export_format: ExportFormat) -> Tuple[str, str]:
     filters = {
         "txt": ("Plain Text (*.txt)", ".txt"),
@@ -203,7 +226,9 @@ def run_export_with_dialog(
     Returns True if export was successful, False otherwise.
     """
     from pathlib import Path
+
     from PyQt6.QtWidgets import QFileDialog
+
     from src.frontend.themed_message_dialog import ThemedMessageDialog
     from src.os_layer.platform_utils import open_file_explorer
 
@@ -212,6 +237,7 @@ def run_export_with_dialog(
     initial = str(Path(last_dir) / f"tasks_export{extension}") if last_dir else f"tasks_export{extension}"
     filepath, _ = QFileDialog.getSaveFileName(
         parent_widget, "Export Tasks", initial, f"{label};;All Files (*.*)",
+        options=QFileDialog.Option.DontUseNativeDialog,  # FIX-C2: force QSS theming
     )
     if not filepath:
         return False
@@ -243,13 +269,30 @@ def run_export_with_dialog(
         groups_doc=main_window.groups_data,
     )
 
-    try:
-        export_to_file(request)
-    except OSError as error:
-        ThemedMessageDialog.warning(parent_widget, "Export Failed", f"Could not write file:\n{error}")
-        return False
+    # FIX-A2: retry loop with user-chosen new path on OSError
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            export_to_file(request)
+            break
+        except OSError as error:
+            if attempt == max_retries - 1:
+                ThemedMessageDialog.warning(parent_widget, "Export Failed",
+                    f"Could not write file after {max_retries} attempts:\n{error}")
+                return False
+            new_path = _prompt_retry_export(parent_widget, str(request.filepath), str(error))
+            if new_path is None:
+                return False
+            request = ExportRequest(
+                filepath=Path(new_path).resolve(),
+                export_format=export_format,
+                include_history=include_history,
+                active_tasks=active_filtered,
+                history_tasks=history_filtered,
+                groups_doc=main_window.groups_data,
+            )
 
-    main_window.state_manager.state["lastExportDir"] = str(path.parent)
+    main_window.state_manager.state["lastExportDir"] = str(request.filepath.parent)
     main_window.state_manager.save()
 
     if ThemedMessageDialog.question(

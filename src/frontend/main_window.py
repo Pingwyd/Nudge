@@ -1,108 +1,55 @@
 import threading
 from datetime import datetime, timedelta
 
-from PyQt6.QtWidgets import (
-    QApplication,
-    QCheckBox,
-    QComboBox,
-    QDateEdit,
-    QDateTimeEdit,
-    QDialog,
-    QFileDialog,
-    QFrame,
-    QHBoxLayout,
-    QInputDialog,
-    QKeySequenceEdit,
-    QLabel,
-    QLineEdit,
-    QListWidget,
-    QListWidgetItem,
-    QMainWindow,
-    QMenu,
-    QMessageBox,
-    QPushButton,
-    QScrollArea,
-    QSlider,
-    QSpinBox,
-    QStackedWidget,
-    QSizePolicy,
-    QTimeEdit,
-    QVBoxLayout,
-    QWidget,
-)
-from PyQt6.QtGui import (
-    QAction,
-    QCursor,
-    QFont,
-    QIcon,
-    QKeySequence,
-    QPainter,
-    QPixmap,
-    QShortcut,
-    QDrag,
-)
-from PyQt6.QtCore import Qt, QRect, QEvent, QSize, QTimer, QPoint, QByteArray, QMimeData, QUrl, pyqtSignal, QAbstractNativeEventFilter
-from PyQt6.QtGui import (
-    QAction,
-    QCursor,
-    QDesktopServices,
-    QFont,
-    QIcon,
-    QKeySequence,
-    QPainter,
-    QPixmap,
-    QShortcut,
-)
-from src.os_layer.desktop_pin import pin_to_desktop, unpin_from_desktop
-from src.os_layer.platform_utils import open_file_explorer, open_url
-from src.os_layer.system_tray import SystemTrayManager
-from src.backend.input_parser import InputParser
-from src.backend.icon import get_app_icon
-from src.backend.task_store import TaskStore
+from PyQt6.QtCore import (QAbstractNativeEventFilter, QByteArray, QEvent,
+                          QMimeData, QPoint, QRect, QSize, Qt, QTimer,
+                          pyqtSignal)
+from PyQt6.QtGui import (QAction, QCursor, QDrag, QFont, QIcon, QKeySequence,
+                         QPainter, QPixmap, QShortcut)
+from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateEdit,
+                             QDialog, QFrame, QHBoxLayout, QKeySequenceEdit,
+                             QLabel, QLineEdit, QListWidget, QListWidgetItem,
+                             QMainWindow, QMenu, QMessageBox, QPushButton,
+                             QScrollArea, QSizePolicy, QSlider, QSpinBox,
+                             QStackedWidget, QTimeEdit, QVBoxLayout, QWidget)
+
+from src import __version__
 from src.backend.boot_checker import BootChecker
 from src.backend.group_store import GroupStore
-from src.backend.task_groups import (
-    GENERAL_GROUP_ID,
-    create_group,
-    group_by_id,
-    group_name,
-    migrate_tasks_group_ids,
-    rebuild_tasks_preserving_groups,
-    sorted_groups,
-    tasks_for_group,
-)
-from src.backend.window_layer import compose_main_window_flags, reconcile_layer_settings
-from src.backend.updater import check_for_update, parse_changelog, UpdateCheckResult
-from src import __version__
-from src.frontend.update_dialog import UpdateInfoDialog
-from src.frontend.history_row import HistoryRowWidget
-from src.frontend.task_group_section import TaskGroupSection
-from src.frontend.themed_message_dialog import ThemedMessageDialog
-from src.frontend.feedback_dialog import FeedbackDialog
-from src.frontend.glass_panel_dialog import GlassPanelDialog
-from src.frontend.theme import (
-    apply_theme_to_app,
-    get_theme,
-    glass_overlap_stylesheet,
-    menu_stylesheet,
-    normalize_theme_id,
-    refresh_glass_shells,
-)
+from src.backend.icon import get_app_icon
+from src.backend.input_parser import InputParser
 from src.backend.state_manager import StateManager
-from src.backend.window_geometry import (
-    DEFAULT_WINDOW_HEIGHT,
-    DEFAULT_WINDOW_WIDTH,
-    MIN_WINDOW_HEIGHT,
-    MIN_WINDOW_WIDTH,
-)
+from src.backend.task_groups import (GENERAL_GROUP_ID, create_group,
+                                     group_by_id, group_name,
+                                     migrate_tasks_group_ids,
+                                     rebuild_tasks_preserving_groups,
+                                     sorted_groups, tasks_for_group)
+from src.backend.task_store import TaskStore
+from src.backend.updater import (UpdateCheckResult, check_for_update,
+                                 parse_changelog)
+from src.backend.window_geometry import (DEFAULT_WINDOW_HEIGHT,
+                                         DEFAULT_WINDOW_WIDTH,
+                                         MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH)
+from src.backend.window_layer import (compose_main_window_flags,
+                                      reconcile_layer_settings)
+from src.frontend.feedback_dialog import FeedbackDialog
 from src.frontend.frameless_chrome import FramelessChromeController
-from src.frontend.responsive_text import (
-    ResponsiveTextRowHelper,
-    apply_editor_field_width,
-    fix_single_line_editor_height,
-    label_content_height,
-    sync_stacked_page_height,
-)
+from src.frontend.glass_panel_dialog import GlassPanelDialog
+from src.frontend.history_row import HistoryRowWidget
+from src.frontend.responsive_text import (ResponsiveTextRowHelper,
+                                          apply_editor_field_width,
+                                          fix_single_line_editor_height,
+                                          label_content_height,
+                                          sync_stacked_page_height)
+from src.frontend.task_group_section import TaskGroupSection
+from src.frontend.theme import (apply_theme_to_app, get_theme, menu_stylesheet,
+                                normalize_theme_id, refresh_glass_shells)
+from src.frontend.themed_input_dialog import ThemedInputDialog
+from src.frontend.themed_message_dialog import ThemedMessageDialog
+from src.frontend.update_dialog import UpdateInfoDialog
+from src.os_layer.desktop_pin import pin_to_desktop, unpin_from_desktop
+from src.os_layer.platform_utils import open_url
+from src.os_layer.system_tray import SystemTrayManager
 
 
 def _history_toolbar_icon(size: int = 16, color: str = "#000000") -> QIcon:
@@ -203,69 +150,6 @@ class GlobalHotkeyFilter(QAbstractNativeEventFilter):
                     return True, 0
         return False, 0
 
-
-class WrappedCheckboxRow(QWidget):
-    def __init__(self, text, checked=False, text_size=14, on_toggled=None, on_context_menu=None, parent=None):
-        super().__init__(parent)
-        self.on_toggled = on_toggled
-        self.on_context_menu = on_context_menu
-
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 4, 6, 4)
-        layout.setSpacing(10)
-
-        self.checkbox = QCheckBox()
-        self.checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.checkbox.setChecked(checked)
-        self.checkbox.toggled.connect(self._handle_toggled)
-        self.checkbox.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.checkbox.customContextMenuRequested.connect(lambda pos: self.contextMenuEventFromChild(self.checkbox.mapToGlobal(pos)))
-        layout.addWidget(self.checkbox, 0, Qt.AlignmentFlag.AlignTop)
-
-        self.label = QLabel(text)
-        self.label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self._text_layout = ResponsiveTextRowHelper(self, self.label, [self.checkbox])
-        self.set_text_size(text_size)
-        layout.addWidget(self.label, 1)
-
-    def _handle_toggled(self, checked):
-        if self.on_toggled:
-            self.on_toggled(checked)
-
-    def set_text_size(self, text_size):
-        font = self.label.font()
-        font.setPointSize(text_size)
-        self.label.setFont(font)
-        self.sync_text_layout()
-
-    def sync_text_layout(self):
-        self._text_layout.sync_layout()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.sync_text_layout()
-
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            pos = event.position().toPoint()
-            if self.childAt(pos) != self.checkbox:
-                self.checkbox.toggle()
-                event.accept()
-                return
-        super().mouseReleaseEvent(event)
-
-    def contextMenuEventFromChild(self, global_pos):
-        if self.on_context_menu:
-            self.on_context_menu(global_pos)
-
-    def contextMenuEvent(self, event):
-        if self.on_context_menu:
-            self.on_context_menu(event.globalPos())
-            event.accept()
-            return
-        super().contextMenuEvent(event)
 
 
 class TaskRowWidget(QWidget):
@@ -1321,7 +1205,7 @@ class SettingsDialog(GlassPanelDialog):
         self._sidebar_layout = QVBoxLayout()
         self._sidebar_layout.setSpacing(4)
         self._sidebar_layout.setContentsMargins(0, 0, 0, 0)
-        tab_names = ["General", "Appearance", "Keyboard shortcuts", "Export", "Advanced", "Help"]
+        tab_names = ["General", "Appearance", "Shortcuts", "Export", "Advanced", "Help"]
         self._page_buttons = []
         self._stack = QStackedWidget()
         self._stack.addWidget(general_tab)
@@ -1590,7 +1474,7 @@ class SettingsDialog(GlassPanelDialog):
             if groups_changed:
                 self._populate_export_group_filter()
                 self._update_export_groups_filter()
-                parent.render_tasks()
+                parent.render_tasks()  # FIX-A1: groups changed — full re-render needed
             else:
                 parent.task_text_size = int(self.state_manager.state.get("taskTextSize", 14))
                 for row in parent.task_row_widgets.values():
@@ -1688,7 +1572,6 @@ class MainWindow(QMainWindow):
         self._history_dialog = None
         self._settings_dialog = None
         self._export_dialog = None
-        self._resize_track_installed: set[int] = set()
         self._escape_count = 0
         self._escape_timer = QTimer(self)
         self._escape_timer.setSingleShot(True)
@@ -1712,7 +1595,7 @@ class MainWindow(QMainWindow):
         self.init_keyboard_shortcuts()
         
         # Render any loaded tasks on boot
-        self.render_tasks()
+        self.render_tasks()  # FIX-A1: initial load — full render required
         
         # Check for lingering tasks from yesterday and notify
         if self.app_state.get("showBootNotification", True):
@@ -1907,7 +1790,7 @@ class MainWindow(QMainWindow):
 
         self._restore_window_geometry()
 
-        QTimer.singleShot(0, self.render_tasks)
+        QTimer.singleShot(0, self.render_tasks)  # FIX-A1: window restore — full render required
 
     def _check_and_prompt_update(self):
         def _check():
@@ -1942,12 +1825,14 @@ class MainWindow(QMainWindow):
         dialog = DownloadDialog(version, download_url, self)
         avoid = self._window_rects_to_avoid()
         self._place_dialog_avoiding_rects(dialog, avoid)
+        self._download_dialog = dialog
         dialog.start_download()
-        dialog.exec()
+        dialog.show()
 
     def _apply_window_layer(self):
         """Apply window layer (AoT / Pin to Desktop) without rebuilding task list."""
-        from src.backend.window_layer import compose_main_window_flags, reconcile_layer_settings
+        from src.backend.window_layer import (compose_main_window_flags,
+                                              reconcile_layer_settings)
         reconcile_layer_settings(self.app_state)
         flags = compose_main_window_flags(
             self.app_state.get("pinnedToDesktop", False),
@@ -1993,6 +1878,10 @@ class MainWindow(QMainWindow):
         self.toggle_always_on_top(not current)
 
     def _open_export_via_shortcut(self):
+        # FIX-D1: suppress shortcut when text editor has focus
+        focused = QApplication.focusWidget()
+        if focused and focused.inherits('QLineEdit'):
+            return
         self.run_export_dialog()
 
     def _toggle_tray_visibility(self):
@@ -2010,12 +1899,11 @@ class MainWindow(QMainWindow):
     def _enable_resize_hover_tracking(self, root: QWidget) -> None:
         """Show resize cursors on window edges even when the pointer is over child widgets (M1)."""
         for widget in [root, *root.findChildren(QWidget)]:
-            widget_id = id(widget)
-            if widget_id in self._resize_track_installed:
+            if widget.property('resize_track_installed'):  # FIX-B1: widget property instead of id() set
                 continue
             widget.setMouseTracking(True)
             widget.installEventFilter(self)
-            self._resize_track_installed.add(widget_id)
+            widget.setProperty('resize_track_installed', True)  # FIX-B1
 
     def eventFilter(self, watched, event):
         if (
@@ -2309,11 +2197,11 @@ class MainWindow(QMainWindow):
             self.export_shortcut.deleteLater()
 
         self.history_shortcut = QShortcut(history_sequence, self)
-        self.history_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        self.history_shortcut.setContext(Qt.ShortcutContext.WindowShortcut)  # FIX-D1: prevent theft from QLineEdit
         self.history_shortcut.activated.connect(self.open_history)
 
         self.settings_shortcut = QShortcut(settings_sequence, self)
-        self.settings_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        self.settings_shortcut.setContext(Qt.ShortcutContext.WindowShortcut)  # FIX-D1
         self.settings_shortcut.activated.connect(self.open_settings)
 
         self.pin_shortcut = QShortcut(pin_sequence, self)
@@ -2335,7 +2223,7 @@ class MainWindow(QMainWindow):
 
         if not export_sequence.isEmpty():
             self.export_shortcut = QShortcut(export_sequence, self)
-            self.export_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+            self.export_shortcut.setContext(Qt.ShortcutContext.WindowShortcut)  # FIX-D1
             self.export_shortcut.activated.connect(self._open_export_via_shortcut)
 
     def process_input(self):
@@ -2434,27 +2322,36 @@ class MainWindow(QMainWindow):
             self.group_combo.blockSignals(False)
 
     def _add_group_dialog(self) -> None:
-        name, accepted = QInputDialog.getText(self, "New Task Group", "Group name:")
-        if not accepted or not name.strip():
+        dlg = ThemedInputDialog(self, title="New Task Group", label="Group name:")
+        if not dlg.exec() == QDialog.DialogCode.Accepted:
+            return
+        name = dlg.get_text().strip()
+        if not name:
             return
         order = len(self.groups_data.get("groups", []))
         new_group = create_group(name, order)
         self.groups_data["groups"].append(new_group)
         self.group_store.save(self.groups_data)
         self._refresh_group_combo(new_group["id"])
-        self.render_tasks()
+        self.render_tasks()  # FIX-A1: group structure changed — full render required
 
     def _rename_group(self, group_id: str) -> None:
         group = group_by_id(self.groups_data, group_id)
         if group is None:
             return
-        name, accepted = QInputDialog.getText(self, "Rename Group", "Group name:", text=group["name"])
-        if not accepted or not name.strip():
+        dlg = ThemedInputDialog(self, title="Rename Group", label="Group name:", default_text=group["name"])
+        if not dlg.exec() == QDialog.DialogCode.Accepted:
             return
-        group["name"] = name.strip()
+        name = dlg.get_text().strip()
+        if not name:
+            return
+        group["name"] = name
         self.group_store.save(self.groups_data)
         self._refresh_group_combo(group_id)
-        self.render_tasks()
+        # FIX-A1: targeted section header update instead of full render_tasks
+        section = self.group_sections.get(group_id)
+        if section is not None:
+            section.refresh_header_count()
 
     def _delete_group(self, group_id: str) -> None:
         if group_id == GENERAL_GROUP_ID:
@@ -2476,7 +2373,7 @@ class MainWindow(QMainWindow):
         self.group_store.save(self.groups_data)
         self.store.save(self.tasks)
         self._refresh_group_combo(GENERAL_GROUP_ID)
-        self.render_tasks()
+        self.render_tasks()  # FIX-A1: group structure changed — full render required
 
     def _move_group_order(self, group_id: str, offset: int) -> None:
         groups = sorted_groups(self.groups_data)
@@ -2492,7 +2389,7 @@ class MainWindow(QMainWindow):
             group["order"] = order
         self.groups_data["groups"] = groups
         self.group_store.save(self.groups_data)
-        self.render_tasks()
+        self.render_tasks()  # FIX-A1: group structure changed — full render required
 
     def _show_group_header_menu(self, group_id: str, global_pos) -> None:
         menu = QMenu(self)
@@ -2538,6 +2435,8 @@ class MainWindow(QMainWindow):
         return tasks_for_group(self.tasks, group_id, include_done=True)
         
     def render_tasks(self):
+        # FIX-A1: Called only on initial load and group-structure changes.
+        # Use _on_task_added / _on_task_moved for incremental updates.
         self.tasks_widget.setUpdatesEnabled(False)
         while self.tasks_layout.count():
             child = self.tasks_layout.takeAt(0)
@@ -2964,9 +2863,7 @@ class MainWindow(QMainWindow):
         archived_task["done"] = True
         archived_task["completedAt"] = datetime.now().isoformat()
 
-        history = self.history_store.load()
-        history.append(archived_task)
-        self.history_store.save(history)
+        self.history_store.append_and_save(archived_task)  # FIX-B2: atomic append
 
         self.tasks.remove(task_ref)
         self.store.save(self.tasks)
@@ -3064,7 +2961,7 @@ class MainWindow(QMainWindow):
             
         self.tasks = [t for t in self.tasks if not t.get("done", False)]
         self.store.save(self.tasks)
-        self.render_tasks()
+        self.render_tasks()  # FIX-A1: clear completed — many tasks affected, full render OK
 
     def _place_dialog_near_geometry(
         self,
@@ -3200,6 +3097,10 @@ class MainWindow(QMainWindow):
         dialog.deleteLater()
 
     def open_history(self):
+        # FIX-D1: suppress shortcut when text editor has focus
+        focused = QApplication.focusWidget()
+        if focused and focused.inherits('QLineEdit'):
+            return
         if self._history_dialog is not None:
             self._history_dialog.close()
             return
@@ -3216,6 +3117,10 @@ class MainWindow(QMainWindow):
         self._run_side_dialog(dialog)
 
     def open_settings(self):
+        # FIX-D1: suppress shortcut when text editor has focus
+        focused = QApplication.focusWidget()
+        if focused and focused.inherits('QLineEdit'):
+            return
         if self._settings_dialog is not None:
             self._settings_dialog.close()
             return
@@ -3300,7 +3205,7 @@ class MainWindow(QMainWindow):
         self.store.save(self.tasks)
 
     def _show_custom_reminder_dialog(self, task_ref):
-        from PyQt6.QtCore import QDate, QDateTime, QTime
+        from PyQt6.QtCore import QDate, QTime
 
         theme_id = normalize_theme_id(self.app_state.get("theme", "dark"))
         theme = get_theme(theme_id)
@@ -3574,7 +3479,7 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def _open_feedback_dialog(self):
-        import json, sys, webbrowser
+        import json
         from urllib.parse import quote
         state_text = json.dumps(self.app_state, indent=2)
         dialog = FeedbackDialog(self, state_text)

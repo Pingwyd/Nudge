@@ -106,6 +106,33 @@ class TaskGroupSection(QWidget):
         if row_widget in self.task_rows:
             self.task_rows.remove(row_widget)
 
+    def refresh(self, tasks: list, text_size: int = 14, main_window=None) -> None:
+        """Clear and repopulate this section's task rows from a task list.
+
+        # FIX-A1: targeted section update — does not call render_tasks.
+        """
+        for row in list(self.task_rows):
+            self.content_layout.removeWidget(row)
+            row.setParent(None)
+            row.deleteLater()
+        self.task_rows.clear()
+        if main_window is not None:
+            from src.frontend.main_window import TaskRowWidget
+            for task in tasks:
+                row = TaskRowWidget(
+                    task["text"],
+                    checked=task.get("done", False),
+                    text_size=text_size,
+                    on_toggled=lambda checked, t=task: main_window.toggle_task(t, checked),
+                    on_commit=lambda new_text, t=task: main_window.update_task_text(t, new_text),
+                    on_context_menu=lambda global_pos, t=task: main_window.show_task_context_menu(t),
+                    content_indent=8,
+                )
+                row._task_ref = task
+                main_window.task_row_widgets[id(task)] = row
+                self.add_task_row(row)
+            self.refresh_header_count()
+
     def refresh_header_count(self) -> None:
         chevron = "▼" if self._expanded else "▶"
         name = self.group.get("name", "Group")
