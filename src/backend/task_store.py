@@ -19,7 +19,7 @@ class TaskStore:
         migrate_legacy_data()
         self.filepath = get_data_file(filename)
         self.tasks = []
-        self._lock = threading.Lock()  # FIX-B2: prevent concurrent load/save races
+        self._lock = threading.RLock()  # FIX-B2: prevent concurrent load/save races
 
     def load(self):
         with self._lock:  # FIX-B2
