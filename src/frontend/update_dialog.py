@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QTextBrowser,
+    QTextEdit,
     QVBoxLayout,
 )
 
@@ -160,6 +161,15 @@ class DownloadDialog(GlassPanelDialog):
         self.status_label.setFont(sfont)
         layout.addWidget(self.status_label)
 
+        self.error_text = QTextEdit()
+        self.error_text.setReadOnly(True)
+        self.error_text.setVisible(False)
+        self.error_text.setMinimumHeight(80)
+        efont = self.error_text.font()
+        efont.setPointSize(10)
+        self.error_text.setFont(efont)
+        layout.addWidget(self.error_text, stretch=1)
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
@@ -202,6 +212,8 @@ class DownloadDialog(GlassPanelDialog):
         QApplication.processEvents()
 
     def _on_finished(self, success: bool, error_msg: str = ""):
+        if not self.isVisible():
+            return
         if success:
             from pathlib import Path
             import tempfile, sys
@@ -215,7 +227,7 @@ class DownloadDialog(GlassPanelDialog):
                 downloaded = temp_dir / asset_name
                 current_exe = Path(sys.executable)
                 _install_update(downloaded, current_exe)
-                self.accept()
+                self.close()
                 from PyQt6.QtWidgets import QApplication
                 from src.frontend.main_window import MainWindow
                 for w in QApplication.topLevelWindows():
@@ -230,15 +242,18 @@ class DownloadDialog(GlassPanelDialog):
         else:
             self.cancel_btn.setText("Close")
             detail = error_msg or "Download failed. Please try again later."
-            self.status_label.setText(detail)
+            self.status_label.setText("Download failed")
+            self.error_text.setPlainText(detail)
+            self.error_text.setVisible(True)
+            self.setMinimumSize(400, 280)
+            self.resize(440, min(400, 200 + self.error_text.document().size().height()))
             self.progress_bar.setValue(0)
-            self.adjustSize()
 
     def _on_cancel(self):
         if self._thread and self._thread.isRunning():
             self._thread.terminate()
             self._thread.wait()
-        self.reject()
+        self.close()
 
     def _apply_theme(self):
         parent = self.parent()
@@ -282,5 +297,12 @@ class DownloadDialog(GlassPanelDialog):
             }}
             QPushButton:hover {{
                 background: {hover};
+            }}
+            QTextEdit {{
+                background: rgba(0,0,0,40);
+                color: #ff6b6b;
+                border: 1px solid {border};
+                border-radius: 6px;
+                padding: 4px;
             }}
         """)

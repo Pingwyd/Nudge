@@ -1942,8 +1942,9 @@ class MainWindow(QMainWindow):
         dialog = DownloadDialog(version, download_url, self)
         avoid = self._window_rects_to_avoid()
         self._place_dialog_avoiding_rects(dialog, avoid)
+        self._download_dialog = dialog
         dialog.start_download()
-        dialog.exec()
+        dialog.show()
 
     def _apply_window_layer(self):
         """Apply window layer (AoT / Pin to Desktop) without rebuilding task list."""
