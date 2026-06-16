@@ -156,6 +156,9 @@ ADD_GROUP_BTN_SIZE = (32, 28)
 # Text truncation
 REMINDER_LIST_TEXT_MAX = 60     # max chars in reminder list task name
 
+# Feedback dialog
+FEEDBACK_MAX_CHARS = 1000
+
 # Context menu
 DIALOG_PLACEMENT_GAP = 15
 

@@ -22,12 +22,12 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QVBoxLayout,
     QWidget,
-    QDialog,
 )
 
 from src.backend.export_service import ExportFormat, ExportRequest, export_to_file, file_filter_for_format
 from src.backend.icon import get_app_icon
 from src.backend.task_groups import sorted_groups
+from src.frontend.glass_panel_dialog import GlassPanelDialog
 from src.frontend.themed_message_dialog import ThemedMessageDialog
 from src.frontend.theme import (
     get_theme,
@@ -44,17 +44,18 @@ def _set_label_point_size(label: QLabel, point_size: int, bold: bool = False) ->
     label.setFont(font)
 
 
-class ExportDialog(QDialog):
+class ExportDialog(GlassPanelDialog):
     def __init__(self, main_window, parent=None):
         super().__init__(parent or main_window)
         self.main_window = main_window
         self.text_size = int(main_window.app_state.get("taskTextSize", 14))
-        self._drag_pos = None
-        self.frame = None
         self._export_group_filter: dict[str, QCheckBox] = {}
         self._export_all_groups_cb: QCheckBox | None = None
         self._export_group_bulk_update = False
         self._init_ui()
+
+    def _get_theme_id(self) -> str:
+        return normalize_theme_id(self.main_window.app_state.get("theme", "dark"))
 
     def _init_ui(self):
         self.setWindowTitle("Export Tasks")
@@ -70,14 +71,10 @@ class ExportDialog(QDialog):
             w, h = 380, 420
         self.resize(w, h)
         self.setMinimumSize(320, 360)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-        self.frame = QFrame(self)
-        self.frame.setObjectName("glassPanel")
-        self.frame.setGeometry(0, 0, w, h)
+        self.bg_frame.setGeometry(0, 0, w, h)
 
-        layout = QVBoxLayout(self.frame)
+        layout = QVBoxLayout(self.bg_frame)
         layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(8)
 
@@ -187,46 +184,6 @@ class ExportDialog(QDialog):
 
         self._update_overlap_opacity()
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-
-    def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.MouseButton.LeftButton and self._drag_pos is not None:
-            self.move(self.pos() + event.globalPosition().toPoint() - self._drag_pos)
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape:
-            self.reject()
-            event.accept()
-            return
-        super().keyPressEvent(event)
-
-    def resizeEvent(self, event):
-        if self.frame is not None:
-            self.frame.setGeometry(self.rect())
-        super().resizeEvent(event)
-
-    def moveEvent(self, event):
-        super().moveEvent(event)
-        self._update_overlap_opacity()
-
-    def _update_overlap_opacity(self):
-        parent = self.parent()
-        if parent is None or not isinstance(parent, QMainWindow):
-            return
-        overlap = self.frameGeometry().intersects(parent.frameGeometry())
-        if overlap:
-            theme_id = normalize_theme_id(self.main_window.app_state.get("theme", "dark"))
-            theme = get_theme(theme_id)
-            self.frame.setStyleSheet(glass_overlap_stylesheet(theme, radius=20))
-        else:
-            theme_id = normalize_theme_id(self.main_window.app_state.get("theme", "dark"))
-            refresh_glass_shells(self, theme_id)
-
     def _selected_format(self) -> ExportFormat:
         value = self.format_combo.currentData()
         return value if value in ("txt", "md", "csv") else "txt"
@@ -254,7 +211,7 @@ class ExportDialog(QDialog):
 
     def _run_export(self):
         from src.backend.export_service import run_export_with_dialog
-        
+
         export_format = self._selected_format()
         success = run_export_with_dialog(
             parent_widget=self,

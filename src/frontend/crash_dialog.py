@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
 
 from src import __version__
 from src.backend.crash_reporter import build_mailto_body, write_crash_log
+from src.frontend.glass_panel_dialog import GlassPanelDialog
 from src.frontend.theme import (
     get_theme,
     normalize_theme_id,
@@ -29,29 +30,23 @@ from src.frontend.theme import (
 from src.frontend.themed_message_dialog import ThemedMessageDialog
 
 
-class CrashDialog(QDialog):
+class CrashDialog(GlassPanelDialog):
     """Report an unexpected error to the user and offer to send details."""
 
     def __init__(self, exc_type, exc_value, exc_tb, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Nudge — Unexpected Error")
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMinimumSize(500, 350)
 
         self._exc_type = exc_type
         self._exc_value = exc_value
         self._exc_tb = exc_tb
-        self._drag_pos = None
-        self.bg_frame = None
 
         self._build_ui()
         self._populate()
         self._apply_theme()
 
     def _build_ui(self):
-        self.bg_frame = QFrame(self)
-        self.bg_frame.setObjectName("glassPanel")
         self.bg_frame.setGeometry(0, 0, 500, 350)
 
         layout = QVBoxLayout(self.bg_frame)
@@ -120,42 +115,6 @@ class CrashDialog(QDialog):
             theme_id = normalize_theme_id(parent.app_state.get("theme", "dark"))
         theme = get_theme(theme_id)
         refresh_glass_shells(self, theme_id)
-
-    def resizeEvent(self, event):
-        if self.bg_frame is not None:
-            self.bg_frame.setGeometry(self.rect())
-        super().resizeEvent(event)
-
-    def moveEvent(self, event):
-        super().moveEvent(event)
-        parent = self.parent()
-        if parent is None:
-            return
-        if isinstance(parent, QDialog):
-            parent = parent.parent()
-        if parent is None:
-            return
-        overlap = self.frameGeometry().intersects(parent.frameGeometry())
-        theme_id = "dark"
-        if hasattr(parent, "app_state"):
-            theme_id = normalize_theme_id(parent.app_state.get("theme", "dark"))
-        if overlap:
-            from src.frontend.theme import glass_overlap_stylesheet
-            theme = get_theme(theme_id)
-            self.bg_frame.setStyleSheet(glass_overlap_stylesheet(theme, radius=20))
-        else:
-            refresh_glass_shells(self, theme_id)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-
-    def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.MouseButton.LeftButton and self._drag_pos is not None:
-            self.move(self.pos() + event.globalPosition().toPoint() - self._drag_pos)
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
 
 
 def install_crash_handler():

@@ -5,7 +5,6 @@ from typing import Optional
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QApplication,
-    QDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -18,40 +17,30 @@ from PyQt6.QtWidgets import (
 
 from src import __version__
 from src.backend.icon import get_app_icon
-from src.frontend.theme import (
-    get_theme,
-    glass_overlap_stylesheet,
-    normalize_theme_id,
-    refresh_glass_shells,
-)
+from src.constants import FEEDBACK_MAX_CHARS
+from src.frontend.glass_panel_dialog import GlassPanelDialog
+from src.frontend.theme import get_theme, normalize_theme_id
 
 
-class FeedbackDialog(QDialog):
+class FeedbackDialog(GlassPanelDialog):
     def __init__(self, parent: Optional[QWidget], state_snapshot: str):
-        super().__init__(parent)
+        super().__init__(parent, overlap_radius=16)
         self.state_snapshot = state_snapshot
-        self._drag_pos = None
         self._init_ui()
 
     def _init_ui(self):
         self.setWindowTitle("Send Feedback")
         self.setWindowIcon(get_app_icon())
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         w, h = 560, 460
         self.resize(w, h)
         self.setMinimumSize(420, 380)
-
-        self.bg_frame = QFrame(self)
-        self.bg_frame.setObjectName("glassPanel")
         self.bg_frame.setGeometry(0, 0, w, h)
 
         layout = QVBoxLayout(self.bg_frame)
         layout.setContentsMargins(20, 18, 20, 16)
         layout.setSpacing(12)
 
-        # ── Title + subtitle ──
         title = QLabel("Send Feedback")
         title.setStyleSheet("font-size: 16px; font-weight: bold;")
         layout.addWidget(title)
@@ -64,7 +53,6 @@ class FeedbackDialog(QDialog):
         subtitle.setStyleSheet("opacity: 0.8;")
         layout.addWidget(subtitle)
 
-        # ── Feedback input card (primary focus) ──
         input_card = QFrame()
         input_card.setObjectName("nestedPanel")
         input_card_layout = QVBoxLayout(input_card)
@@ -77,7 +65,7 @@ class FeedbackDialog(QDialog):
         input_title.setStyleSheet("font-weight: 600;")
         input_header.addWidget(input_title)
         input_header.addStretch()
-        char_count = QLabel("0")
+        char_count = QLabel(f"0 / {FEEDBACK_MAX_CHARS}")
         char_count.setStyleSheet("opacity: 0.6;")
         self._char_count = char_count
         input_header.addWidget(char_count)
@@ -88,11 +76,11 @@ class FeedbackDialog(QDialog):
         self.input_edit.setMinimumHeight(110)
         self.input_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.input_edit.textChanged.connect(self._update_char_count)
+        self.input_edit.installEventFilter(self)
         input_card_layout.addWidget(self.input_edit, 1)
 
         layout.addWidget(input_card, 1)
 
-        # ── Snapshot section (collapsed by default) ──
         snapshot_header_row = QHBoxLayout()
         snapshot_header_row.setSpacing(8)
         self.snapshot_toggle = QPushButton("▸  App state snapshot")
@@ -133,7 +121,6 @@ class FeedbackDialog(QDialog):
         self.snapshot_card.setVisible(False)
         layout.addWidget(self.snapshot_card)
 
-        # ── Footer note ──
         footer = QLabel(
             "A pre-filled email to nudgefeedback@gmail.com will open. "
             "The full text is also copied to your clipboard as a backup."
@@ -142,7 +129,6 @@ class FeedbackDialog(QDialog):
         footer.setStyleSheet("opacity: 0.7;")
         layout.addWidget(footer)
 
-        # ── Action buttons ──
         button_row = QHBoxLayout()
         button_row.setSpacing(8)
         button_row.addStretch(1)
@@ -169,7 +155,14 @@ class FeedbackDialog(QDialog):
 
     def _update_char_count(self) -> None:
         text = self.input_edit.toPlainText()
-        self._char_count.setText(str(len(text)))
+        count = len(text)
+        self._char_count.setText(f"{count} / {FEEDBACK_MAX_CHARS}")
+        if count >= FEEDBACK_MAX_CHARS:
+            theme_id = self._get_theme_id()
+            danger = get_theme(theme_id)["colors"]["danger_text"]
+            self._char_count.setStyleSheet(f"color: {danger}; font-weight: bold;")
+        else:
+            self._char_count.setStyleSheet("opacity: 0.6;")
 
     def _toggle_snapshot(self) -> None:
         visible = not self.snapshot_card.isVisible()
@@ -185,7 +178,6 @@ class FeedbackDialog(QDialog):
         QApplication.clipboard().setText(self.state_snapshot)
         original = self._copy_btn.text()
         self._copy_btn.setText("Copied!")
-        from PyQt6.QtCore import QTimer
         QTimer.singleShot(1200, lambda: self._copy_btn.setText(original))
 
     def _send_feedback(self) -> None:
@@ -210,44 +202,17 @@ class FeedbackDialog(QDialog):
     def feedback_text(self) -> str:
         return self.input_edit.toPlainText().strip()
 
-    def resizeEvent(self, event):
-        self.bg_frame.setGeometry(self.rect())
-        super().resizeEvent(event)
-
-    def moveEvent(self, event):
-        super().moveEvent(event)
-        self._update_overlap_opacity()
-
-    def _update_overlap_opacity(self):
-        parent = self.parent()
-        if parent is None:
-            return
-        if isinstance(parent, QDialog):
-            parent = parent.parent()
-        if parent is None:
-            return
-        overlap = self.frameGeometry().intersects(parent.frameGeometry())
-        theme_id = normalize_theme_id(getattr(parent, "app_state", {}).get("theme", "dark"))
-        if overlap:
-            theme = get_theme(theme_id)
-            self.bg_frame.setStyleSheet(glass_overlap_stylesheet(theme, radius=16))
-        else:
-            refresh_glass_shells(self, theme_id)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-
-    def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.MouseButton.LeftButton and self._drag_pos is not None:
-            self.move(self.pos() + event.globalPosition().toPoint() - self._drag_pos)
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape:
-            self.reject()
-            event.accept()
-            return
-        super().keyPressEvent(event)
+    def eventFilter(self, obj, event):
+        if obj is self.input_edit and event.type() == event.Type.KeyPress:
+            if len(self.input_edit.toPlainText()) >= FEEDBACK_MAX_CHARS:
+                allowed_keys = {
+                    Qt.Key.Key_Backspace, Qt.Key.Key_Delete,
+                    Qt.Key.Key_Left, Qt.Key.Key_Right,
+                    Qt.Key.Key_Up, Qt.Key.Key_Down,
+                    Qt.Key.Key_Home, Qt.Key.Key_End,
+                    Qt.Key.Key_Tab,
+                }
+                if event.key() in allowed_keys or not event.text():
+                    return super().eventFilter(obj, event)
+                return True
+        return super().eventFilter(obj, event)

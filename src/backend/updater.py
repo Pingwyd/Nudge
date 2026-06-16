@@ -242,6 +242,17 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
         "  \u2022 \u201cYou\u2019re up to date\u201d popup is more compact (350\u00d7150)\n"
         "  \u2022 Update download no longer silently fails on SSL errors \u2014 shows the real error"
     ),
+    "1.7.0": (
+        "\ud83d\udce6 Unified Dialog System\n"
+        "  \u2022 All popups now use a shared glass-panel base \u2014 consistent look, faster updates\n"
+        "  \u2022 History, Settings, and Tutorial windows share the same drag/resize behavior\n"
+        "\n"
+        "\ud83d\udcd6 Tutorial Revamped\n"
+        "  \u2022 Welcome guide is now paginated into 6 focused pages with Prev/Next navigation\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Eliminated ~400 lines of duplicated frameless-window setup across all dialogs"
+    ),
 }
 
 

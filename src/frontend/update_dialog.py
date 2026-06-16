@@ -4,8 +4,6 @@ from typing import Optional
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
-    QDialog,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QProgressBar,
@@ -13,11 +11,11 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QTextBrowser,
     QVBoxLayout,
-    QWidget,
 )
 
 from src import __version__
-from src.frontend.theme import get_theme, normalize_theme_id, refresh_glass_shells
+from src.frontend.glass_panel_dialog import GlassPanelDialog
+from src.frontend.theme import get_theme, normalize_theme_id
 
 
 def _changelog_to_html(text: str) -> str:
@@ -38,28 +36,20 @@ def _changelog_to_html(text: str) -> str:
     return "".join(html_parts)
 
 
-class UpdateInfoDialog(QDialog):
+class UpdateInfoDialog(GlassPanelDialog):
     def __init__(self, latest_version: str, changelog: str, download_url: str, parent=None):
         super().__init__(parent)
         self.latest_version = latest_version
         self.changelog = changelog
         self.download_url = download_url
-        self._drag_pos = None
-        self.frame = None
         self._init_ui()
 
     def _init_ui(self):
         self.setWindowTitle("Update Available")
         self.resize(420, 480)
         self.setMinimumSize(320, 360)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-        self.frame = QFrame(self)
-        self.frame.setObjectName("glassPanel")
-        self.frame.setGeometry(0, 0, 420, 480)
-
-        layout = QVBoxLayout(self.frame)
+        layout = QVBoxLayout(self.bg_frame)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
 
@@ -114,47 +104,6 @@ class UpdateInfoDialog(QDialog):
 
         layout.addLayout(btn_row)
 
-        self._update_overlap_opacity()
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-
-    def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.MouseButton.LeftButton and self._drag_pos is not None:
-            self.move(self.pos() + event.globalPosition().toPoint() - self._drag_pos)
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-
-    def resizeEvent(self, event):
-        if self.frame is not None:
-            self.frame.setGeometry(self.rect())
-        super().resizeEvent(event)
-
-    def moveEvent(self, event):
-        super().moveEvent(event)
-        self._update_overlap_opacity()
-
-    def _update_overlap_opacity(self):
-        parent = self.parent()
-        if parent is None:
-            return
-        theme_id = normalize_theme_id(getattr(parent, "app_state", {}).get("theme", "dark"))
-        theme = get_theme(theme_id)
-        overlap = self.frameGeometry().intersects(parent.frameGeometry()) if hasattr(parent, "frameGeometry") else False
-        if overlap:
-            solid = "rgba(248, 248, 250, 255)" if theme_id == "light" else "rgba(18, 18, 18, 255)"
-            self.frame.setStyleSheet(f"""
-                QWidget#glassPanel {{
-                    background: {solid};
-                    border-radius: 20px;
-                    border: 1px solid {theme["colors"].get("border", "rgba(255,255,255,60)")};
-                }}
-            """)
-        else:
-            refresh_glass_shells(self, theme_id)
-
 
 class DownloadThread(QThread):
     progress = pyqtSignal(int, int)
@@ -178,13 +127,11 @@ class DownloadThread(QThread):
         self.finished.emit(path is not None, err)
 
 
-class DownloadDialog(QDialog):
+class DownloadDialog(GlassPanelDialog):
     def __init__(self, latest_version: str, download_url: str, parent=None):
         super().__init__(parent)
         self.latest_version = latest_version
         self.download_url = download_url
-        self._drag_pos = None
-        self.frame = None
         self._thread = None
         self._init_ui()
 
@@ -192,14 +139,8 @@ class DownloadDialog(QDialog):
         self.setWindowTitle("Downloading Update")
         self.resize(380, 180)
         self.setMinimumSize(300, 160)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-        self.frame = QFrame(self)
-        self.frame.setObjectName("glassPanel")
-        self.frame.setGeometry(0, 0, 380, 180)
-
-        layout = QVBoxLayout(self.frame)
+        layout = QVBoxLayout(self.bg_frame)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(12)
 
@@ -237,7 +178,6 @@ class DownloadDialog(QDialog):
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
 
-        self._update_overlap_opacity()
         self._apply_theme()
 
     def start_download(self):
@@ -254,7 +194,7 @@ class DownloadDialog(QDialog):
             mb_total = total / (1024 * 1024)
             self.status_label.setText(f"{mb_dl:.1f} MB / {mb_total:.1f} MB")
         else:
-            pct = int(downloaded / 1024) % 100  # animate bar from downloaded KB
+            pct = int(downloaded / 1024) % 100
             self.progress_bar.setValue(min(pct, 99))
             mb_dl = downloaded / (1024 * 1024)
             self.status_label.setText(f"{mb_dl:.1f} MB downloaded")
@@ -311,7 +251,7 @@ class DownloadDialog(QDialog):
         accent = theme["colors"].get("accent", "#4fc3f7")
         hover = theme["colors"].get("hover", "rgba(255,255,255,20)")
 
-        self.frame.setStyleSheet(f"""
+        self.bg_frame.setStyleSheet(f"""
             QWidget#glassPanel {{
                 background: {bg};
                 border-radius: 20px;
@@ -344,42 +284,3 @@ class DownloadDialog(QDialog):
                 background: {hover};
             }}
         """)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-
-    def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.MouseButton.LeftButton and self._drag_pos is not None:
-            self.move(self.pos() + event.globalPosition().toPoint() - self._drag_pos)
-            self._drag_pos = event.globalPosition().toPoint()
-            event.accept()
-
-    def resizeEvent(self, event):
-        if self.frame is not None:
-            self.frame.setGeometry(self.rect())
-        super().resizeEvent(event)
-
-    def moveEvent(self, event):
-        super().moveEvent(event)
-        self._update_overlap_opacity()
-
-    def _update_overlap_opacity(self):
-        parent = self.parent()
-        if parent is None:
-            return
-        theme_id = normalize_theme_id(getattr(parent, "app_state", {}).get("theme", "dark"))
-        theme = get_theme(theme_id)
-        overlap = self.frameGeometry().intersects(parent.frameGeometry()) if hasattr(parent, "frameGeometry") else False
-        if overlap:
-            solid = "rgba(248, 248, 250, 255)" if theme_id == "light" else "rgba(18, 18, 18, 255)"
-            self.frame.setStyleSheet(f"""
-                QWidget#glassPanel {{
-                    background: {solid};
-                    border-radius: 20px;
-                    border: 1px solid {theme["colors"].get("border", "rgba(255,255,255,60)")};
-                }}
-            """)
-        else:
-            refresh_glass_shells(self, theme_id)

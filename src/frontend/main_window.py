@@ -79,6 +79,7 @@ from src.frontend.history_row import HistoryRowWidget
 from src.frontend.task_group_section import TaskGroupSection
 from src.frontend.themed_message_dialog import ThemedMessageDialog
 from src.frontend.feedback_dialog import FeedbackDialog
+from src.frontend.glass_panel_dialog import GlassPanelDialog
 from src.frontend.theme import (
     apply_theme_to_app,
     get_theme,
@@ -576,9 +577,9 @@ class UndoToast(QFrame):
         self.move(10, parent.height() - self.height() - 10)
 
 
-class HistoryDialog(QDialog):
+class HistoryDialog(GlassPanelDialog):
     def __init__(self, history_store, restore_callback, groups_data=None, parent=None, state_manager=None):
-        super().__init__(parent)
+        super().__init__(parent, overlap_radius=20, escape_action="close")
         self.history_store = history_store
         self.restore_callback = restore_callback
         self.groups_data = groups_data or {"groups": []}
@@ -598,13 +599,9 @@ class HistoryDialog(QDialog):
             w, h = 350, 450
         self.resize(w, h)
         self.setMinimumSize(300, 360)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMouseTracking(True)
         self._chrome = FramelessChromeController(self, min_width=300, min_height=360)
 
-        self.bg_frame = QFrame(self)
-        self.bg_frame.setObjectName("glassPanel")
         self.bg_frame.setGeometry(0, 0, 380, 560)
 
         layout = QVBoxLayout(self.bg_frame)
@@ -648,76 +645,16 @@ class HistoryDialog(QDialog):
         layout.addWidget(close_btn)
 
     def resizeEvent(self, event):
-        self.bg_frame.setGeometry(self.rect())
         super().resizeEvent(event)
         self._sync_history_row_text_layouts()
         if self._state_manager and event.oldSize().isValid():
             self._state_manager.save_history_window_size(event.size().width(), event.size().height())
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self._chrome is not None:
-            local_pos = event.position().toPoint()
-            global_pos = event.globalPosition().toPoint()
-            if self._chrome.handle_mouse_press(global_pos, local_pos, False):
-                event.accept()
-                return
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if self._chrome is not None:
-            local_pos = event.position().toPoint()
-            global_pos = event.globalPosition().toPoint()
-            if self._chrome.handle_mouse_move(global_pos, local_pos):
-                event.accept()
-                return
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self._chrome is not None:
-            if self._chrome.handle_mouse_release():
-                event.accept()
-                return
-        super().mouseReleaseEvent(event)
-
-    def eventFilter(self, watched, event):
-        if (
-            event.type() == event.Type.MouseMove
-            and self._chrome is not None
-            and not self._chrome.is_resizing
-            and not self._chrome.is_dragging
-        ):
-            global_pos = event.globalPosition().toPoint()
-            local_pos = self.mapFromGlobal(global_pos)
-            self._chrome.update_hover_cursor(local_pos)
-        return super().eventFilter(watched, event)
-
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape:
-            self.close()
-            event.accept()
-            return
-        super().keyPressEvent(event)
-
-    def moveEvent(self, event):
-        super().moveEvent(event)
-        self._update_overlap_opacity()
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        self._update_overlap_opacity()
-
-    def _update_overlap_opacity(self):
+    def _get_theme_id(self):
         parent = self.parent()
-        if parent is None or not isinstance(parent, QMainWindow):
-            return
-        overlap = self.frameGeometry().intersects(parent.frameGeometry())
-        if overlap:
-            theme_id = normalize_theme_id(parent.app_state.get("theme", "dark"))
-            theme = get_theme(theme_id)
-            self.bg_frame.setStyleSheet(glass_overlap_stylesheet(theme, radius=20))
-        else:
-            theme_id = normalize_theme_id(parent.app_state.get("theme", "dark"))
-            refresh_glass_shells(self, theme_id)
+        if parent is not None and hasattr(parent, "app_state"):
+            return normalize_theme_id(parent.app_state.get("theme", "dark"))
+        return "dark"
 
     def _sync_history_row_text_layouts(self):
         for row in self.rows:
@@ -789,9 +726,52 @@ class HistoryDialog(QDialog):
                 break
         QTimer.singleShot(0, self._sync_history_row_text_layouts)
 
-class TutorialDialog(QDialog):
+class TutorialDialog(GlassPanelDialog):
+    _PAGES = [
+        [
+            ("Add a task", "Type in the input bar and press Enter. Click anywhere else to remove focus from it."),
+            ("Auto-scroll", "The list scrolls automatically so your newest task is always visible."),
+            ("Edit / Delete", "Right-click a task or use the Edit button on its right edge."),
+            ("Groups", "Use the Group dropdown and + button to organize tasks. Disable groups in Settings \u2192 Advanced for a flat list view."),
+        ],
+        [
+            ("Drag to reorder", "Drag a task by its text to reorder it within its group or move it to another group."),
+            ("Drag text out", "Drag a task's text into Notepad, a browser, or any text field \u2192 it pastes as plain text."),
+            ("Task reminders", "Right-click a task \u2192 Set Reminder. Choose a preset or pick a custom date/time. Supports repeat intervals."),
+            ("Timer", "Click the timer icon in the title bar to start a countdown. Double-click a timer to edit its duration."),
+        ],
+        [
+            ("History", "Click \U0001f552 to restore previously completed tasks. Newly archived tasks appear live while History is open."),
+            ("Settings", "Click \u2699 to open Settings with 5 tabs: General, Appearance, Keyboard Shortcuts, Export, and Advanced."),
+            ("Overflow menu", "Click \u00b7\u00b7\u00b7 for quick access to Check for Updates, Send Feedback, and Support Nudge."),
+            ("Keyboard shortcuts", "Settings \u2192 Keyboard Shortcuts to customize shortcuts for History, Settings, Timer, and more."),
+        ],
+        [
+            ("Text size", "Settings \u2192 Appearance \u2192 adjust the Text Size slider to make task text larger or smaller."),
+            ("Themes", "Settings \u2192 Appearance \u2192 switch between Dark, Light, and OLED themes. Changes apply instantly."),
+            ("Always on Top", "Press Alt+T to keep the window above others."),
+            ("Pin to Desktop", "Alt+P pins the window to your desktop so it stays visible behind other windows."),
+        ],
+        [
+            ("Start on Boot", "Settings \u2192 General \u2192 toggle Start on Boot to launch Nudge when you sign in."),
+            ("Export", "Press Ctrl+E or use the Export tab in Settings to export tasks as .txt, .md, or .csv."),
+            ("Check for updates", "Settings \u2192 General or click \U0001f504 in the title bar to check for new versions."),
+            ("Tray icon", "Right-click the tray icon to show the window or quit. The \u2716 close button minimizes to tray."),
+        ],
+        [
+            ("Resize", "Drag any edge or corner of the window."),
+            ("Quick Quit", "Press Escape twice within 1 second to close the app."),
+        ],
+    ]
+
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__(parent, overlap_radius=20, escape_action="accept")
+        self._page_index = 0
+        self._pages: list[QWidget] = []
+        self._prev_btn = None
+        self._next_btn = None
+        self._page_label = None
+        self._stack = None
         self.init_ui()
 
     def init_ui(self):
@@ -799,12 +779,6 @@ class TutorialDialog(QDialog):
         self.setWindowIcon(get_app_icon())
         self.resize(400, 420)
         self.setMinimumSize(340, 360)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-
-        self.bg_frame = QFrame(self)
-        self.bg_frame.setObjectName("glassPanel")
-        self.bg_frame.setGeometry(0, 0, 400, 420)
 
         layout = QVBoxLayout(self.bg_frame)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -820,58 +794,47 @@ class TutorialDialog(QDialog):
         subtitle.setStyleSheet("opacity: 0.7;")
         layout.addWidget(subtitle)
 
-        features = [
-            ("Add a task", "Type in the input bar and press Enter. Click anywhere else to remove focus from it."),
-            ("Auto-scroll", "The list scrolls automatically so your newest task is always visible."),
-            ("Edit / Delete", "Right-click a task or use the Edit button on its right edge."),
-            ("Groups", "Use the Group dropdown and + button to organize tasks. Disable groups in Settings → Advanced for a flat list view."),
-            ("Drag to reorder", "Drag a task by its text to reorder it within its group or move it to another group."),
-            ("Drag text out", "Drag a task's text into Notepad, a browser, or any text field → it pastes as plain text."),
-            ("Task reminders", "Right-click a task → Set Reminder. Choose a preset or pick a custom date/time. Supports repeat intervals."),
-            ("Timer", "Click the timer icon in the title bar to start a countdown. Double-click a timer to edit its duration."),
-            ("History", "Click 🕒 to restore previously completed tasks. Newly archived tasks appear live while History is open."),
-            ("Settings", "Click ⚙ to open Settings with 5 tabs: General, Appearance, Keyboard Shortcuts, Export, and Advanced."),
-            ("Overflow menu", "Click ··· for quick access to Check for Updates, Send Feedback, and Support Nudge."),
-            ("Keyboard shortcuts", "Settings → Keyboard Shortcuts to customize shortcuts for History, Settings, Timer, and more."),
-            ("Text size", "Settings → Appearance → adjust the Text Size slider to make task text larger or smaller."),
-            ("Themes", "Settings → Appearance → switch between Dark, Light, and OLED themes. Changes apply instantly."),
-            ("Always on Top", "Press Alt+T to keep the window above others."),
-            ("Pin to Desktop", "Alt+P pins the window to your desktop so it stays visible behind other windows."),
-            ("Start on Boot", "Settings → General → toggle Start on Boot to launch Nudge when you sign in."),
-            ("Export", "Press Ctrl+E or use the Export tab in Settings to export tasks as .txt, .md, or .csv."),
-            ("Check for updates", "Settings → General or click 🔄 in the title bar to check for new versions."),
-            ("Tray icon", "Right-click the tray icon to show the window or quit. The ✖ close button minimizes to tray."),
-            ("Resize", "Drag any edge or corner of the window."),
-            ("Quick Quit", "Press Escape twice within 1 second to close the app."),
-        ]
+        self._stack = QStackedWidget()
+        for page_items in self._PAGES:
+            page = QWidget()
+            page_lay = QVBoxLayout(page)
+            page_lay.setSpacing(10)
+            page_lay.setContentsMargins(5, 5, 5, 5)
+            for feat_title, feat_desc in page_items:
+                block = QVBoxLayout()
+                block.setSpacing(2)
+                t = QLabel(feat_title)
+                t.setStyleSheet("font-weight: bold;")
+                d = QLabel(feat_desc)
+                d.setWordWrap(True)
+                d.setStyleSheet("opacity: 0.7;")
+                block.addWidget(t)
+                block.addWidget(d)
+                page_lay.addLayout(block)
+            page_lay.addStretch()
+            self._pages.append(page)
+            self._stack.addWidget(page)
+        self._stack.setCurrentIndex(0)
+        layout.addWidget(self._stack, stretch=1)
 
-        scroll = QScrollArea(self)
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("border: none; background: transparent;")
+        nav_row = QHBoxLayout()
+        nav_row.setSpacing(8)
+        self._prev_btn = QPushButton("\u25c0 Prev")
+        self._prev_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._prev_btn.clicked.connect(self._prev_page)
+        self._prev_btn.setEnabled(False)
+        nav_row.addWidget(self._prev_btn)
 
-        content = QWidget()
-        content.setObjectName("transparentSurface")
-        cl = QVBoxLayout(content)
-        cl.setSpacing(10)
-        cl.setContentsMargins(5, 5, 5, 5)
+        self._page_label = QLabel()
+        self._page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        nav_row.addWidget(self._page_label, stretch=1)
 
-        for title_text, desc in features:
-            row = QVBoxLayout()
-            row.setSpacing(2)
-            feature_title = QLabel(title_text)
-            feature_title.setStyleSheet("font-weight: bold;")
-            feature_desc = QLabel(desc)
-            feature_desc.setWordWrap(True)
-            feature_desc.setStyleSheet("opacity: 0.7;")
-            row.addWidget(feature_title)
-            row.addWidget(feature_desc)
-            cl.addLayout(row)
+        self._next_btn = QPushButton("Next \u25b6")
+        self._next_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._next_btn.clicked.connect(self._next_page)
+        nav_row.addWidget(self._next_btn)
 
-        cl.addStretch()
-        content.setLayout(cl)
-        scroll.setWidget(content)
-        layout.addWidget(scroll, stretch=1)
+        layout.addLayout(nav_row)
 
         got_it = QPushButton("Got it!")
         got_it.setObjectName("primaryButton")
@@ -879,21 +842,30 @@ class TutorialDialog(QDialog):
         got_it.clicked.connect(self.accept)
         layout.addWidget(got_it)
 
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape:
-            self.accept()
-            event.accept()
-            return
-        super().keyPressEvent(event)
+        self._update_nav()
 
-    def resizeEvent(self, event):
-        self.bg_frame.setGeometry(self.rect())
-        super().resizeEvent(event)
+    def _update_nav(self):
+        total = len(self._PAGES)
+        self._page_label.setText(f"{self._page_index + 1} / {total}")
+        self._prev_btn.setEnabled(self._page_index > 0)
+        self._next_btn.setVisible(self._page_index < total - 1)
+
+    def _prev_page(self):
+        if self._page_index > 0:
+            self._page_index -= 1
+            self._stack.setCurrentIndex(self._page_index)
+            self._update_nav()
+
+    def _next_page(self):
+        if self._page_index < len(self._PAGES) - 1:
+            self._page_index += 1
+            self._stack.setCurrentIndex(self._page_index)
+            self._update_nav()
 
 
-class SettingsDialog(QDialog):
+class SettingsDialog(GlassPanelDialog):
     def __init__(self, state_manager, parent=None):
-        super().__init__(parent)
+        super().__init__(parent, overlap_radius=20, escape_action="close")
         self.state_manager = state_manager
         self.text_size = int(self.state_manager.state.get("taskTextSize", 14))
         self._saved_snapshot = {}
@@ -995,14 +967,8 @@ class SettingsDialog(QDialog):
             w, h = saved_w, saved_h
         self.resize(w, h)
         self.setMinimumSize(400, 460)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMouseTracking(True)
         self._chrome = FramelessChromeController(self, min_width=400, min_height=460)
-        
-        self.bg_frame = QFrame(self)
-        self.bg_frame.setObjectName("glassPanel")
-        self.bg_frame.setGeometry(0, 0, w, h)
 
         layout = QVBoxLayout(self.bg_frame)
         layout.setContentsMargins(14, 12, 14, 14)
@@ -1419,77 +1385,6 @@ class SettingsDialog(QDialog):
         self._update_overlap_opacity()
         self._populate_task_reminder_list()
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self._chrome is not None:
-            local_pos = event.position().toPoint()
-            global_pos = event.globalPosition().toPoint()
-            if self._chrome.handle_mouse_press(global_pos, local_pos, False):
-                event.accept()
-                return
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if self._chrome is not None:
-            local_pos = event.position().toPoint()
-            global_pos = event.globalPosition().toPoint()
-            if self._chrome.handle_mouse_move(global_pos, local_pos):
-                event.accept()
-                return
-        super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self._chrome is not None:
-            if self._chrome.handle_mouse_release():
-                event.accept()
-                return
-        super().mouseReleaseEvent(event)
-
-    def eventFilter(self, watched, event):
-        if (
-            event.type() == event.Type.MouseMove
-            and self._chrome is not None
-            and not self._chrome.is_resizing
-            and not self._chrome.is_dragging
-        ):
-            global_pos = event.globalPosition().toPoint()
-            local_pos = self.mapFromGlobal(global_pos)
-            self._chrome.update_hover_cursor(local_pos)
-        return super().eventFilter(watched, event)
-
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape:
-            self.close()
-            event.accept()
-            return
-        super().keyPressEvent(event)
-
-    def resizeEvent(self, event):
-        self.bg_frame.setGeometry(self.rect())
-        super().resizeEvent(event)
-        if event.oldSize().isValid():
-            self.state_manager.save_settings_window_size(event.size().width(), event.size().height())
-
-    def moveEvent(self, event):
-        super().moveEvent(event)
-        self._update_overlap_opacity()
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        self._update_overlap_opacity()
-
-    def _update_overlap_opacity(self):
-        parent = self.parent()
-        if parent is None or not isinstance(parent, QMainWindow):
-            return
-        overlap = self.frameGeometry().intersects(parent.frameGeometry())
-        if overlap:
-            theme_id = normalize_theme_id(self.state_manager.state.get("theme", "dark"))
-            theme = get_theme(theme_id)
-            self.bg_frame.setStyleSheet(glass_overlap_stylesheet(theme, radius=20))
-        else:
-            theme_id = normalize_theme_id(self.state_manager.state.get("theme", "dark"))
-            refresh_glass_shells(self, theme_id)
-
     def _on_pin_to_desktop_toggled(self, checked: bool):
         if checked:
             self.always_on_top_cb.blockSignals(True)
@@ -1503,6 +1398,14 @@ class SettingsDialog(QDialog):
             self.pin_cb.setChecked(False)
             self.pin_cb.blockSignals(False)
         self._mark_dirty()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if event.oldSize().isValid():
+            self.state_manager.save_settings_window_size(event.size().width(), event.size().height())
+
+    def _get_theme_id(self):
+        return normalize_theme_id(self.state_manager.state.get("theme", "dark"))
 
     def _switch_page(self, index: int):
         for i, btn in enumerate(self._page_buttons):

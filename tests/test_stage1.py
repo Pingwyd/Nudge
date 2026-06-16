@@ -134,3 +134,119 @@ def test_period_split_single():
     tasks = InputParser.parse_input("Buy eggs")
     assert len(tasks) == 1
     assert tasks[0]["text"] == "Buy eggs"
+
+
+# ── 8.1 Feedback Character Count Display ──────────────────────────────
+
+def test_char_count_format(qapp_instance):
+    """Character counter should display 'N / 1000' format."""
+    from src.frontend.feedback_dialog import FeedbackDialog
+
+    dlg = FeedbackDialog(None, "snapshot")
+    dlg.input_edit.setPlainText("Hello")
+    assert dlg._char_count.text() == "5 / 1000"
+    dlg.close()
+
+
+def test_char_count_zero(qapp_instance):
+    """Character counter starts at '0 / 1000'."""
+    from src.frontend.feedback_dialog import FeedbackDialog
+
+    dlg = FeedbackDialog(None, "snapshot")
+    assert dlg._char_count.text() == "0 / 1000"
+    dlg.close()
+
+
+def test_char_count_at_limit(qapp_instance):
+    """Counter uses danger color when at 1000 characters."""
+    from src.frontend.feedback_dialog import FeedbackDialog
+    from src.constants import FEEDBACK_MAX_CHARS
+
+    dlg = FeedbackDialog(None, "snapshot")
+    dlg.input_edit.setPlainText("A" * FEEDBACK_MAX_CHARS)
+    text = dlg._char_count.text()
+    assert text == f"{FEEDBACK_MAX_CHARS} / {FEEDBACK_MAX_CHARS}"
+    # Check danger styling is applied (font-weight: bold)
+    style = dlg._char_count.styleSheet()
+    assert "bold" in style
+    dlg.close()
+
+
+def test_char_count_below_limit_normal_style(qapp_instance):
+    """Counter uses normal muted style when below limit."""
+    from src.frontend.feedback_dialog import FeedbackDialog
+
+    dlg = FeedbackDialog(None, "snapshot")
+    dlg.input_edit.setPlainText("Short")
+    style = dlg._char_count.styleSheet()
+    assert "bold" not in style
+    assert "opacity" in style
+    dlg.close()
+
+
+def test_char_count_blocks_input_at_limit(qapp_instance):
+    """Typing should be blocked when at character limit."""
+    from src.frontend.feedback_dialog import FeedbackDialog
+    from src.constants import FEEDBACK_MAX_CHARS
+    from PyQt6.QtGui import QKeyEvent
+
+    dlg = FeedbackDialog(None, "snapshot")
+    dlg.input_edit.setPlainText("A" * FEEDBACK_MAX_CHARS)
+
+    # Simulate typing 'x' via event filter — should be blocked
+    event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_X, Qt.KeyboardModifier.NoModifier, "x")
+    dlg.eventFilter(dlg.input_edit, event)
+    assert dlg.input_edit.toPlainText() == "A" * FEEDBACK_MAX_CHARS  # unchanged
+    dlg.close()
+
+
+def test_char_count_allows_backspace_at_limit(qapp_instance):
+    """Backspace should work even when at character limit."""
+    from src.frontend.feedback_dialog import FeedbackDialog
+    from src.constants import FEEDBACK_MAX_CHARS
+    from PyQt6.QtGui import QKeyEvent
+
+    dlg = FeedbackDialog(None, "snapshot")
+    dlg.input_edit.setPlainText("A" * FEEDBACK_MAX_CHARS)
+
+    # Simulate backspace via event filter — should be allowed
+    event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Backspace, Qt.KeyboardModifier.NoModifier)
+    accepted = dlg.eventFilter(dlg.input_edit, event)
+    # eventFilter returns False = pass through to QTextEdit (not blocked)
+    assert not accepted
+    dlg.close()
+
+
+def test_char_count_allows_delete_at_limit(qapp_instance):
+    """Delete key should work even when at character limit."""
+    from src.frontend.feedback_dialog import FeedbackDialog
+    from src.constants import FEEDBACK_MAX_CHARS
+    from PyQt6.QtGui import QKeyEvent
+
+    dlg = FeedbackDialog(None, "snapshot")
+    dlg.input_edit.setPlainText("A" * FEEDBACK_MAX_CHARS)
+
+    # Simulate delete via event filter — should be allowed
+    event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Delete, Qt.KeyboardModifier.NoModifier)
+    accepted = dlg.eventFilter(dlg.input_edit, event)
+    # eventFilter returns False = pass through to QTextEdit (not blocked)
+    assert not accepted
+    dlg.close()
+
+
+def test_char_count_allows_shortcut_keys(qapp_instance):
+    """Modifier-only keystrokes (Ctrl+C etc.) should pass through at limit."""
+    from src.frontend.feedback_dialog import FeedbackDialog
+    from src.constants import FEEDBACK_MAX_CHARS
+    from PyQt6.QtGui import QKeyEvent
+
+    dlg = FeedbackDialog(None, "snapshot")
+    dlg.input_edit.setPlainText("A" * FEEDBACK_MAX_CHARS)
+
+    # Simulate Ctrl+C — modifier-only, no text, should pass through
+    event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
+    accepted = dlg.eventFilter(dlg.input_edit, event)
+    assert not accepted  # not blocked
+    # Text should remain unchanged
+    assert dlg.input_edit.toPlainText() == "A" * FEEDBACK_MAX_CHARS
+    dlg.close()
