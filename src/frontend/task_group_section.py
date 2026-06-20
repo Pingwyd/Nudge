@@ -6,7 +6,8 @@ from __future__ import annotations
 
 from typing import Callable, List, Optional
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QEvent, QMimeData, QPoint, Qt
+from PyQt6.QtGui import QDrag, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -41,6 +42,8 @@ class TaskGroupSection(QWidget):
         self.task_rows: List[QWidget] = []
         self._main_window = None
         self._drag_hover_index = -1
+        self._drag_start_pos = None
+        self._is_dragging = False
         self.setAcceptDrops(True)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
@@ -55,6 +58,7 @@ class TaskGroupSection(QWidget):
         self.header_btn.clicked.connect(self._toggle)
         self.header_btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.header_btn.customContextMenuRequested.connect(self._open_header_menu)
+        self.header_btn.installEventFilter(self)
         root.addWidget(self.header_btn)
 
         self.content = QWidget()
@@ -90,6 +94,56 @@ class TaskGroupSection(QWidget):
     def _open_header_menu(self, pos):
         if self.on_header_context_menu:
             self.on_header_context_menu(self.group_id, self.header_btn.mapToGlobal(pos))
+
+    def eventFilter(self, obj, event):
+        if obj is self.header_btn and event.type() == QEvent.Type.MouseButtonPress:
+            if event.button() == Qt.MouseButton.LeftButton:
+                self._drag_start_pos = event.position().toPoint()
+                self._is_dragging = False
+                return True
+        elif obj is self.header_btn and event.type() == QEvent.Type.MouseMove:
+            if (self._drag_start_pos is not None and
+                event.buttons() & Qt.MouseButton.LeftButton):
+                delta = event.position().toPoint() - self._drag_start_pos
+                if delta.manhattanLength() > 10:
+                    self._is_dragging = True
+                    self._start_group_drag()
+                    self._drag_start_pos = None
+                    return True
+        elif obj is self.header_btn and event.type() == QEvent.Type.MouseButtonRelease:
+            if self._is_dragging:
+                self._is_dragging = False
+                self._drag_start_pos = None
+                return True
+            self._drag_start_pos = None
+            self._toggle()
+            return True
+        return super().eventFilter(obj, event)
+
+    def _start_group_drag(self):
+        mw = self._main_window
+        if mw is None:
+            return
+        groups_enabled = mw.app_state.get("groupsEnabled", True)
+        if not groups_enabled:
+            return
+        drag = QDrag(self)
+        mime = QMimeData()
+        mime.setData("application/x-nudge-group", self.group_id.encode())
+        group_name = self.group.get("name", "Group")
+        task_texts = [r._task_ref.get("text", "") for r in self.task_rows if hasattr(r, "_task_ref")]
+        mime.setText(f"{group_name}\n" + "\n".join(f"- {t}" for t in task_texts))
+        drag.setMimeData(mime)
+        pix = self.header_btn.grab()
+        ghost = QPixmap(pix.size())
+        ghost.fill(Qt.GlobalColor.transparent)
+        p = QPainter(ghost)
+        p.setOpacity(0.55)
+        p.drawPixmap(0, 0, pix)
+        p.end()
+        drag.setPixmap(ghost)
+        drag.setHotSpot(QPoint(pix.width() // 2, pix.height()))
+        drag.exec(Qt.DropAction.MoveAction)
 
     def add_task_row(self, row_widget: QWidget, index: int | None = None) -> None:
         if index is not None:
@@ -182,6 +236,13 @@ class TaskGroupSection(QWidget):
                 self._update_indicator()
                 event.acceptProposedAction()
                 return
+        elif event.mimeData().hasFormat("application/x-nudge-group"):
+            mw = self._main_window
+            if mw is not None:
+                pos = self.mapTo(mw.tasks_widget, event.position().toPoint())
+                mw._update_group_drop_indicator(pos)
+            event.acceptProposedAction()
+            return
         event.ignore()
 
     def dragMoveEvent(self, event):
@@ -190,20 +251,36 @@ class TaskGroupSection(QWidget):
             self._update_indicator()
             event.acceptProposedAction()
             return
+        elif event.mimeData().hasFormat("application/x-nudge-group"):
+            mw = self._main_window
+            if mw is not None:
+                pos = self.mapTo(mw.tasks_widget, event.position().toPoint())
+                mw._update_group_drop_indicator(pos)
+            event.acceptProposedAction()
+            return
         event.ignore()
 
     def dragLeaveEvent(self, event):
         self._drag_hover_index = -1
         self._drop_indicator.hide()
+        mw = self._main_window
+        if mw is not None:
+            mw._group_drop_indicator.hide()
 
     def dropEvent(self, event):
         self._drag_hover_index = -1
         self._drop_indicator.hide()
+        mw = self._main_window
+        if event.mimeData().hasFormat("application/x-nudge-group"):
+            if mw is not None:
+                pos = self.mapTo(mw.tasks_widget, event.position().toPoint())
+                mw._on_group_drop(pos, event.mimeData())
+            event.acceptProposedAction()
+            return
         source = event.source()
         if source is None or not hasattr(source, "_task_ref"):
             return
         insert_index = self._drop_index_at(event.position().toPoint())
-        mw = self._main_window
         if mw is not None:
             mw._on_row_dropped(source, self.group_id, insert_index)
         event.acceptProposedAction()

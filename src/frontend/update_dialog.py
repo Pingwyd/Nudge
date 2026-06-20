@@ -247,6 +247,7 @@ class DownloadDialog(GlassPanelDialog):
             self.error_text.setVisible(True)
             self.setMinimumSize(400, 280)
             self.resize(440, min(400, 200 + self.error_text.document().size().height()))
+            self.adjustSize()
             self.progress_bar.setValue(0)
 
     def _on_cancel(self):

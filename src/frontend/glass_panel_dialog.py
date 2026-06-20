@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QFrame, QDialog, QWidget
 
 from src.frontend.theme import (
@@ -46,6 +46,8 @@ class GlassPanelDialog(QDialog):
         """
         super().__init__(parent)
         self._drag_pos = None
+        self._drag_target = None
+        self._drag_pending = False
         self._overlap_radius = overlap_radius
         self._escape_action = escape_action
 
@@ -114,11 +116,18 @@ class GlassPanelDialog(QDialog):
             event.buttons() == Qt.MouseButton.LeftButton
             and self._drag_pos is not None
         ):
-            self.move(
-                self.pos() + event.globalPosition().toPoint() - self._drag_pos
-            )
+            self._drag_target = self.pos() + event.globalPosition().toPoint() - self._drag_pos
             self._drag_pos = event.globalPosition().toPoint()
+            if not self._drag_pending:
+                self._drag_pending = True
+                QTimer.singleShot(0, self._apply_deferred_move)
             event.accept()
+
+    def _apply_deferred_move(self):
+        if self._drag_target is not None:
+            self.move(self._drag_target)
+            self._drag_target = None
+        self._drag_pending = False
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
@@ -131,3 +140,7 @@ class GlassPanelDialog(QDialog):
             event.accept()
             return
         super().keyPressEvent(event)
+
+    def closeEvent(self, event):
+        event.accept()
+        self.reject()

@@ -197,7 +197,6 @@ def _prompt_retry_export(parent_widget, original_path: str, error_detail: str) -
         new_path, _ = QFileDialog.getSaveFileName(
             parent_widget, "Export Tasks (new location)",
             str(original_path), f"{label};;All Files (*.*)",
-            options=QFileDialog.Option.DontUseNativeDialog,  # FIX-C2
         )
         return new_path if new_path else None
     return None
@@ -237,7 +236,6 @@ def run_export_with_dialog(
     initial = str(Path(last_dir) / f"tasks_export{extension}") if last_dir else f"tasks_export{extension}"
     filepath, _ = QFileDialog.getSaveFileName(
         parent_widget, "Export Tasks", initial, f"{label};;All Files (*.*)",
-        options=QFileDialog.Option.DontUseNativeDialog,  # FIX-C2: force QSS theming
     )
     if not filepath:
         return False
