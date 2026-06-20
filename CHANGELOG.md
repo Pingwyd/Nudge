@@ -5,6 +5,40 @@ All notable changes to Nudge are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-06-20
+
+### Added
+- **Group drag-reorder** — drag a group's header to rearrange groups. Drop indicator shows between groups. External paste to Notepad etc. copies "Group Name\n- Task 1\n- Task 2".
+- **History search** — search bar in History panel filters tasks live as you type.
+- **History "Don't ask to delete"** — checkbox to skip the confirmation dialog when clearing history items.
+- **Clear All button** in History panel — one-click clear of all archived tasks.
+- **Undo toast dismiss button** — small ✕ button to dismiss the undo toast without triggering undo.
+- **Horizontal scroll for task input** — longer text scrolls horizontally in the add-task bar and edit field.
+
+### Changed
+- **Undo toast width** increased from 350px → 520px to better accommodate longer messages.
+
+### Fixed
+- **Group drag not starting** — QPushButton was capturing mouse events before the eventFilter could detect drag motion. Consumed the press event to take control.
+- **Group drop indicator invisible** — TaskGroupSection drag handlers now accept `application/x-nudge-group` MIME; indicator raised above layout widgets after render.
+- **QLineEdit crash** — removed invalid `setHorizontalScrollBarPolicy()` call on QLineEdit (not a scroll-area widget).
+
+## [1.9.0] - 2026-06-19
+
+### Added
+- **Live countdown timer** on tasks with active reminders — shows `Xh Ym`, `Ym`, or `Zs` above the Edit button, updating every second with the accent color from the current theme.
+- **Double-click to restore** in History panel — replaces single-click to prevent accidental restores.
+
+### Changed
+- **Settings → Reminders** is now its own dedicated tab (between Export and Advanced) instead of a popup dialog.
+- **Reset to Defaults** now resets only the active Settings tab (General, Appearance, Shortcuts, Export, Reminders, Advanced, or Help) instead of all settings at once.
+- **Undo Toast** is now rendered as a child widget inside the app window instead of a floating top-level window — eliminates positioning glitches and off-screen toasts.
+
+### Fixed
+- **Drag stutter** — task rows now use deferred-move with `QTimer.singleShot(0)` coalescing instead of raw `move()` calls, eliminating micro-stutters during drag.
+- **Confirmation dialogs** for destructive actions (delete task, delete history item, clear reminder, clear completed) — all now show themed confirmation prompts before proceeding.
+- **Entry widget theming** — QKeySequenceEdit, QListWidget, QComboBox, and nested settings panels now properly inherit Dark/Light/OLED themes.
+
 ## [1.1.0] - 2026-06-07
 
 ### Added

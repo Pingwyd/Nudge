@@ -1,108 +1,55 @@
 import threading
 from datetime import datetime, timedelta
 
-from PyQt6.QtWidgets import (
-    QApplication,
-    QCheckBox,
-    QComboBox,
-    QDateEdit,
-    QDateTimeEdit,
-    QDialog,
-    QFileDialog,
-    QFrame,
-    QHBoxLayout,
-    QInputDialog,
-    QKeySequenceEdit,
-    QLabel,
-    QLineEdit,
-    QListWidget,
-    QListWidgetItem,
-    QMainWindow,
-    QMenu,
-    QMessageBox,
-    QPushButton,
-    QScrollArea,
-    QSlider,
-    QSpinBox,
-    QStackedWidget,
-    QSizePolicy,
-    QTimeEdit,
-    QVBoxLayout,
-    QWidget,
-)
-from PyQt6.QtGui import (
-    QAction,
-    QCursor,
-    QFont,
-    QIcon,
-    QKeySequence,
-    QPainter,
-    QPixmap,
-    QShortcut,
-    QDrag,
-)
-from PyQt6.QtCore import Qt, QRect, QEvent, QSize, QTimer, QPoint, QByteArray, QMimeData, QUrl, pyqtSignal, QAbstractNativeEventFilter
-from PyQt6.QtGui import (
-    QAction,
-    QCursor,
-    QDesktopServices,
-    QFont,
-    QIcon,
-    QKeySequence,
-    QPainter,
-    QPixmap,
-    QShortcut,
-)
-from src.os_layer.desktop_pin import pin_to_desktop, unpin_from_desktop
-from src.os_layer.platform_utils import open_file_explorer, open_url
-from src.os_layer.system_tray import SystemTrayManager
-from src.backend.input_parser import InputParser
-from src.backend.icon import get_app_icon
-from src.backend.task_store import TaskStore
+from PyQt6.QtCore import (QAbstractNativeEventFilter, QByteArray, QEvent,
+                          QMimeData, QPoint, QRect, QSize, Qt, QTimer,
+                          pyqtSignal)
+from PyQt6.QtGui import (QAction, QCursor, QDrag, QFont, QIcon, QKeySequence,
+                         QPainter, QPixmap, QShortcut)
+from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateEdit,
+                             QDialog, QFrame, QHBoxLayout, QKeySequenceEdit,
+                             QLabel, QLineEdit, QListWidget, QListWidgetItem,
+                             QMainWindow, QMenu, QMessageBox, QPushButton,
+                             QScrollArea, QSizePolicy, QSlider, QSpinBox,
+                             QStackedWidget, QTimeEdit, QVBoxLayout, QWidget)
+
+from src import __version__
 from src.backend.boot_checker import BootChecker
 from src.backend.group_store import GroupStore
-from src.backend.task_groups import (
-    GENERAL_GROUP_ID,
-    create_group,
-    group_by_id,
-    group_name,
-    migrate_tasks_group_ids,
-    rebuild_tasks_preserving_groups,
-    sorted_groups,
-    tasks_for_group,
-)
-from src.backend.window_layer import compose_main_window_flags, reconcile_layer_settings
-from src.backend.updater import check_for_update, parse_changelog, UpdateCheckResult
-from src import __version__
-from src.frontend.update_dialog import UpdateInfoDialog
-from src.frontend.history_row import HistoryRowWidget
-from src.frontend.task_group_section import TaskGroupSection
-from src.frontend.themed_message_dialog import ThemedMessageDialog
-from src.frontend.feedback_dialog import FeedbackDialog
-from src.frontend.glass_panel_dialog import GlassPanelDialog
-from src.frontend.theme import (
-    apply_theme_to_app,
-    get_theme,
-    glass_overlap_stylesheet,
-    menu_stylesheet,
-    normalize_theme_id,
-    refresh_glass_shells,
-)
+from src.backend.icon import get_app_icon
+from src.backend.input_parser import InputParser
 from src.backend.state_manager import StateManager
-from src.backend.window_geometry import (
-    DEFAULT_WINDOW_HEIGHT,
-    DEFAULT_WINDOW_WIDTH,
-    MIN_WINDOW_HEIGHT,
-    MIN_WINDOW_WIDTH,
-)
+from src.backend.task_groups import (GENERAL_GROUP_ID, create_group,
+                                     group_by_id, group_name,
+                                     migrate_tasks_group_ids,
+                                     rebuild_tasks_preserving_groups,
+                                     sorted_groups, tasks_for_group)
+from src.backend.task_store import TaskStore
+from src.backend.updater import (UpdateCheckResult, check_for_update,
+                                 parse_changelog)
+from src.backend.window_geometry import (DEFAULT_WINDOW_HEIGHT,
+                                         DEFAULT_WINDOW_WIDTH,
+                                         MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH)
+from src.backend.window_layer import (compose_main_window_flags,
+                                      reconcile_layer_settings)
+from src.frontend.feedback_dialog import FeedbackDialog
 from src.frontend.frameless_chrome import FramelessChromeController
-from src.frontend.responsive_text import (
-    ResponsiveTextRowHelper,
-    apply_editor_field_width,
-    fix_single_line_editor_height,
-    label_content_height,
-    sync_stacked_page_height,
-)
+from src.frontend.glass_panel_dialog import GlassPanelDialog
+from src.frontend.history_row import HistoryRowWidget
+from src.frontend.responsive_text import (ResponsiveTextRowHelper,
+                                          apply_editor_field_width,
+                                          fix_single_line_editor_height,
+                                          label_content_height,
+                                          sync_stacked_page_height)
+from src.frontend.task_group_section import TaskGroupSection
+from src.frontend.theme import (apply_theme_to_app, get_theme, menu_stylesheet,
+                                normalize_theme_id, refresh_glass_shells)
+from src.frontend.themed_input_dialog import ThemedInputDialog
+from src.frontend.themed_message_dialog import ThemedMessageDialog
+from src.frontend.update_dialog import UpdateInfoDialog
+from src.os_layer.desktop_pin import pin_to_desktop, unpin_from_desktop
+from src.os_layer.platform_utils import open_url
+from src.os_layer.system_tray import SystemTrayManager
 
 
 def _history_toolbar_icon(size: int = 16, color: str = "#000000") -> QIcon:
@@ -156,6 +103,10 @@ class GlobalHotkeyFilter(QAbstractNativeEventFilter):
         super().__init__()
         self._callbacks = {}
         self._next_id = 1000
+        self._hwnd = None
+
+    def set_hwnd(self, hwnd):
+        self._hwnd = hwnd
 
     def register(self, key_sequence_str, callback):
         seq = QKeySequence.fromString(key_sequence_str, QKeySequence.SequenceFormat.PortableText)
@@ -176,14 +127,16 @@ class GlobalHotkeyFilter(QAbstractNativeEventFilter):
         vk = qt_key
         hotkey_id = self._next_id
         self._next_id += 1
-        if not ctypes.windll.user32.RegisterHotKey(None, hotkey_id, mod, vk):
+        hwnd = self._hwnd if self._hwnd else None
+        if not ctypes.windll.user32.RegisterHotKey(hwnd, hotkey_id, mod, vk):
             return None
         self._callbacks[hotkey_id] = callback
         return hotkey_id
 
     def unregister(self, hotkey_id):
         if hotkey_id in self._callbacks:
-            ctypes.windll.user32.UnregisterHotKey(None, hotkey_id)
+            hwnd = self._hwnd if self._hwnd else None
+            ctypes.windll.user32.UnregisterHotKey(hwnd, hotkey_id)
             del self._callbacks[hotkey_id]
 
     def unregister_all(self):
@@ -191,7 +144,8 @@ class GlobalHotkeyFilter(QAbstractNativeEventFilter):
             self.unregister(hid)
 
     def nativeEventFilter(self, eventType, message):
-        if bytes(eventType) == b"windows_dispatcher_MSG":
+        etype = bytes(eventType)
+        if etype == b"windows_dispatcher_MSG" or b"windows" in etype:
             try:
                 msg = _MSG.from_address(int(message))
             except Exception:
@@ -203,69 +157,6 @@ class GlobalHotkeyFilter(QAbstractNativeEventFilter):
                     return True, 0
         return False, 0
 
-
-class WrappedCheckboxRow(QWidget):
-    def __init__(self, text, checked=False, text_size=14, on_toggled=None, on_context_menu=None, parent=None):
-        super().__init__(parent)
-        self.on_toggled = on_toggled
-        self.on_context_menu = on_context_menu
-
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 4, 6, 4)
-        layout.setSpacing(10)
-
-        self.checkbox = QCheckBox()
-        self.checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.checkbox.setChecked(checked)
-        self.checkbox.toggled.connect(self._handle_toggled)
-        self.checkbox.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.checkbox.customContextMenuRequested.connect(lambda pos: self.contextMenuEventFromChild(self.checkbox.mapToGlobal(pos)))
-        layout.addWidget(self.checkbox, 0, Qt.AlignmentFlag.AlignTop)
-
-        self.label = QLabel(text)
-        self.label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self._text_layout = ResponsiveTextRowHelper(self, self.label, [self.checkbox])
-        self.set_text_size(text_size)
-        layout.addWidget(self.label, 1)
-
-    def _handle_toggled(self, checked):
-        if self.on_toggled:
-            self.on_toggled(checked)
-
-    def set_text_size(self, text_size):
-        font = self.label.font()
-        font.setPointSize(text_size)
-        self.label.setFont(font)
-        self.sync_text_layout()
-
-    def sync_text_layout(self):
-        self._text_layout.sync_layout()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.sync_text_layout()
-
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            pos = event.position().toPoint()
-            if self.childAt(pos) != self.checkbox:
-                self.checkbox.toggle()
-                event.accept()
-                return
-        super().mouseReleaseEvent(event)
-
-    def contextMenuEventFromChild(self, global_pos):
-        if self.on_context_menu:
-            self.on_context_menu(global_pos)
-
-    def contextMenuEvent(self, event):
-        if self.on_context_menu:
-            self.on_context_menu(event.globalPos())
-            event.accept()
-            return
-        super().contextMenuEvent(event)
 
 
 class TaskRowWidget(QWidget):
@@ -328,18 +219,35 @@ class TaskRowWidget(QWidget):
         self.editor = QLineEdit(text)
         self.editor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.editor.returnPressed.connect(self.commit_edit)
+        self.editor.setDragEnabled(True)
         edit_layout.addWidget(self.editor, 1)
 
         self.content_stack.addWidget(display_page)
         self.content_stack.addWidget(edit_page)
         layout.addWidget(self.content_stack, 1, Qt.AlignmentFlag.AlignVCenter)
 
+        self._countdown_label = QLabel()
+        self._countdown_label.setStyleSheet("font-size: 10px;color: transparent; background: transparent; border: none;")
+        self._countdown_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._countdown_label.setFixedHeight(14)
+        self._countdown_label.hide()
+
+        self._countdown_timer = QTimer(self)
+        self._countdown_timer.setInterval(1000)
+        self._countdown_timer.timeout.connect(self._update_countdown)
+
         self.edit_btn = QPushButton("Edit")
         self.edit_btn.setObjectName("ghostButton")
         self.edit_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.edit_btn.setStyleSheet("font-size: 12px; padding: 3px 10px; min-height: 0;")
         self.edit_btn.clicked.connect(self.toggle_edit_mode)
-        layout.addWidget(self.edit_btn, 0, Qt.AlignmentFlag.AlignBottom)
+
+        self._edit_column = QVBoxLayout()
+        self._edit_column.setContentsMargins(0, 0, 0, 0)
+        self._edit_column.setSpacing(0)
+        self._edit_column.addWidget(self._countdown_label, 0, Qt.AlignmentFlag.AlignRight)
+        self._edit_column.addWidget(self.edit_btn, 0, Qt.AlignmentFlag.AlignRight)
+        layout.addLayout(self._edit_column, 0)
 
         reserved = [self.edit_btn]
         if self._indent_spacer is not None:
@@ -428,6 +336,63 @@ class TaskRowWidget(QWidget):
         else:
             self.begin_edit()
 
+    def set_task_ref(self, task_ref):
+        self._task_ref = task_ref
+        if task_ref and task_ref.get("reminderAt") and not task_ref.get("reminderFired", False):
+            self._start_countdown()
+        else:
+            self._stop_countdown()
+
+    def _start_countdown(self):
+        if not self._countdown_timer.isActive():
+            self._apply_countdown_theme()
+            self._update_countdown()
+            self._countdown_timer.start()
+
+    def _stop_countdown(self):
+        if self._countdown_timer.isActive():
+            self._countdown_timer.stop()
+        self._countdown_label.hide()
+        self._countdown_label.setStyleSheet("font-size: 10px; color: transparent; background: transparent; border: none;")
+
+    def _update_countdown(self):
+        task = self._task_ref
+        if not task or not task.get("reminderAt") or task.get("reminderFired", False):
+            self._stop_countdown()
+            return
+        try:
+            reminder_dt = datetime.fromisoformat(task["reminderAt"])
+        except (ValueError, TypeError):
+            self._stop_countdown()
+            return
+        remaining = reminder_dt - datetime.now()
+        if remaining.total_seconds() <= 0:
+            self._stop_countdown()
+            return
+        total_secs = int(remaining.total_seconds())
+        hours = total_secs // 3600
+        minutes = (total_secs % 3600) // 60
+        seconds = total_secs % 60
+        if hours > 0:
+            text = f"{hours}h {minutes}m {seconds}s"
+        elif minutes > 0:
+            text = f"{minutes}m {seconds}s"
+        else:
+            text = f"{seconds}s"
+        self._countdown_label.setText(text)
+        self._countdown_label.show()
+
+    def _apply_countdown_theme(self):
+        parent = self.parent()
+        theme_id = "dark"
+        if parent and hasattr(parent, "app_state"):
+            theme_id = normalize_theme_id(parent.app_state.get("theme", "dark"))
+        theme = get_theme(theme_id)
+        accent = theme["colors"].get("accent", "#4fc3f7")
+        self._countdown_label.setStyleSheet(
+            f"font-size: 10px; color: {accent}; background: transparent; border: none;"
+        )
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.sync_text_layout()
@@ -497,21 +462,17 @@ class UndoToast(QFrame):
 
     def __init__(self, parent, message, undo_callback, timeout_ms=5000):
         super().__init__(parent)
+        self._main_window = parent
         self._undo_callback = undo_callback
         self.setObjectName("undoToast")
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
-        )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setMaximumWidth(600)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 8, 14, 8)
         layout.setSpacing(10)
 
         msg_label = QLabel(message)
+        msg_label.setWordWrap(True)
         layout.addWidget(msg_label)
 
         undo_btn = QPushButton("Undo")
@@ -519,6 +480,15 @@ class UndoToast(QFrame):
         undo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         undo_btn.clicked.connect(self._on_undo)
         layout.addWidget(undo_btn)
+
+        dismiss_btn = QPushButton("X")
+        dismiss_btn.setObjectName("ghostButton")
+        dismiss_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        font = dismiss_btn.font()
+        font.setBold(True)
+        dismiss_btn.setFont(font)
+        dismiss_btn.clicked.connect(self._dismiss)
+        layout.addWidget(dismiss_btn)
 
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
@@ -540,10 +510,38 @@ class UndoToast(QFrame):
     def showEvent(self, event):
         super().showEvent(event)
         self._apply_theme()
-        self._position_near_parent()
+        self._reposition()
+
+    def _reposition(self):
+        parent = self._main_window
+        if parent is None:
+            return
+        self.adjustSize()
+        if self.layout() is not None:
+            self.layout().activate()
+        tw = self.width()
+        th = self.height()
+        margin = 10
+        pw = parent.width()
+        ph = parent.height()
+        screen_pos = parent.mapToGlobal(QPoint(0, 0))
+        screen = parent.screen().availableGeometry()
+        x_right = screen_pos.x() + pw + margin
+        if x_right + tw <= screen.right():
+            x = x_right
+        else:
+            x = screen_pos.x() - tw - margin
+        if x < screen.left():
+            x = screen.left()
+        y = screen_pos.y() + ph - th - margin
+        if y < screen.top():
+            y = screen.top()
+        if y + th > screen.bottom():
+            y = screen.bottom() - th
+        self.move(x, y)
 
     def _apply_theme(self):
-        parent = self.parent()
+        parent = self._main_window
         theme_id = "dark"
         if parent and hasattr(parent, "app_state"):
             theme_id = normalize_theme_id(parent.app_state.get("theme", "dark"))
@@ -551,30 +549,22 @@ class UndoToast(QFrame):
         c = theme["colors"]
         self.setStyleSheet(f"""
             QFrame#undoToast {{
-                background: {c.get('surface', '#1e1e2e')};
-                border: 1px solid {c.get('border', 'rgba(255,255,255,25)')};
+                background: {c.get('glass_start', '#1e1e1e')};
+                border: 1px solid {c.get('border', 'rgba(255,255,255,60)')};
                 border-radius: 12px;
             }}
             QLabel {{
-                color: {c.get('text', '#e0e0e0')};
+                color: {c.get('text', '#ffffff')};
                 font-size: 13px;
             }}
             QPushButton {{
-                color: {c.get('accent', '#7aa2f7')};
+                color: {c.get('accent', '#4fc3f7')};
                 font-weight: bold;
                 font-size: 13px;
                 border: none;
                 background: transparent;
             }}
         """)
-
-    def _position_near_parent(self):
-        parent = self.parent()
-        if parent is None:
-            return
-        self.adjustSize()
-        pw = parent.width()
-        self.move(10, parent.height() - self.height() - 10)
 
 
 class HistoryDialog(GlassPanelDialog):
@@ -614,11 +604,25 @@ class HistoryDialog(GlassPanelDialog):
         self.title_label = title
         layout.addWidget(title)
 
-        hint = QLabel("Click any entry to restore it to the task list.")
+        hint = QLabel("Double-click any entry to restore it to the task list.")
         hint.setWordWrap(True)
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hint.setStyleSheet("opacity: 0.7;")
         layout.addWidget(hint)
+
+        self.skip_delete_cb = QCheckBox("Don't ask for confirmation to delete")
+        self.skip_delete_cb.setCursor(Qt.CursorShape.PointingHandCursor)
+        if self._state_manager:
+            skip = self._state_manager.state.get("historySkipDeleteConfirm", False)
+            self.skip_delete_cb.setChecked(skip)
+            self.skip_delete_cb.toggled.connect(self._on_skip_delete_toggled)
+        layout.addWidget(self.skip_delete_cb)
+
+        self.search_bar = QLineEdit()
+        self.search_bar.setPlaceholderText("Search history...")
+        self.search_bar.setClearButtonEnabled(True)
+        self.search_bar.textChanged.connect(self._filter_history)
+        layout.addWidget(self.search_bar)
 
         # Scroll area for tasks matching the main window
         self.scroll_area = QScrollArea(self)
@@ -637,6 +641,12 @@ class HistoryDialog(GlassPanelDialog):
         
         self.refresh_history()
         
+        clear_all_btn = QPushButton("Clear All")
+        clear_all_btn.setObjectName("ghostButton")
+        clear_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        clear_all_btn.clicked.connect(self.clear_all_history)
+        layout.addWidget(clear_all_btn)
+
         close_btn = QPushButton("Close")
         close_btn.setObjectName("primaryButton")
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -656,6 +666,12 @@ class HistoryDialog(GlassPanelDialog):
             return normalize_theme_id(parent.app_state.get("theme", "dark"))
         return "dark"
 
+    def _filter_history(self, text):
+        query = text.strip().lower()
+        for row in self.rows:
+            task_text = row.task_ref.get("text", "").lower()
+            row.setVisible(not query or query in task_text)
+
     def _sync_history_row_text_layouts(self):
         for row in self.rows:
             if hasattr(row, "sync_text_layout"):
@@ -670,6 +686,8 @@ class HistoryDialog(GlassPanelDialog):
                 child.widget().deleteLater()
 
         self._history_tasks = self.history_store.load()
+        count = len(self._history_tasks)
+        self.title_label.setText(f"Completed Tasks History ({count})")
         for task in reversed(self._history_tasks):
             date_str = task.get("completedAt", task.get("createdAt", "")).split("T")[0]
             gname = group_name(self.groups_data, task.get("groupId"))
@@ -704,6 +722,7 @@ class HistoryDialog(GlassPanelDialog):
         row.task_ref = archived_task
         self.tasks_layout.insertWidget(0, row, 0, Qt.AlignmentFlag.AlignTop)
         self.rows.insert(0, row)
+        self._filter_history(self.search_bar.text())
         QTimer.singleShot(0, self._sync_history_row_text_layouts)
 
     def restore_history_item(self, task_ref):
@@ -712,7 +731,16 @@ class HistoryDialog(GlassPanelDialog):
         self._history_tasks = [t for t in self._history_tasks if t is not task_ref]
         self.history_store.save(self._history_tasks)
 
+    def _on_skip_delete_toggled(self, checked):
+        if self._state_manager:
+            self._state_manager.state["historySkipDeleteConfirm"] = checked
+            self._state_manager.save()
+
     def delete_history_item(self, task_ref):
+        skip_confirm = self._state_manager.state.get("historySkipDeleteConfirm", False) if self._state_manager else False
+        if not skip_confirm:
+            if not ThemedMessageDialog.question(self, "Delete History Entry", "Are you sure you want to delete this history entry? This cannot be undone."):
+                return
         self._remove_row_for_task(task_ref)
         self._history_tasks = [t for t in self._history_tasks if t is not task_ref]
         self.history_store.save(self._history_tasks)
@@ -726,41 +754,60 @@ class HistoryDialog(GlassPanelDialog):
                 break
         QTimer.singleShot(0, self._sync_history_row_text_layouts)
 
+    def clear_all_history(self):
+        skip_confirm = self._state_manager.state.get("historySkipDeleteConfirm", False) if self._state_manager else False
+        if not skip_confirm:
+            if not ThemedMessageDialog.question(self, "Clear History", "Are you sure you want to clear ALL history entries? This cannot be undone."):
+                return
+        self.rows.clear()
+        while self.tasks_layout.count():
+            child = self.tasks_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        self._history_tasks = []
+        self.history_store.save(self._history_tasks)
+        if self.title_label:
+            self.title_label.setText("Completed Tasks History (0)")
+        self.tasks_layout.addStretch(1)
+        self._sync_history_row_text_layouts()
+
 class TutorialDialog(GlassPanelDialog):
     _PAGES = [
         [
             ("Add a task", "Type in the input bar and press Enter. Click anywhere else to remove focus from it."),
             ("Auto-scroll", "The list scrolls automatically so your newest task is always visible."),
             ("Edit / Delete", "Right-click a task or use the Edit button on its right edge."),
-            ("Groups", "Use the Group dropdown and + button to organize tasks. Disable groups in Settings \u2192 Advanced for a flat list view."),
+            ("Groups", "Use the Group dropdown and + button to organize tasks. Disable groups in Settings → Advanced for a flat list view."),
         ],
         [
             ("Drag to reorder", "Drag a task by its text to reorder it within its group or move it to another group."),
-            ("Drag text out", "Drag a task's text into Notepad, a browser, or any text field \u2192 it pastes as plain text."),
-            ("Task reminders", "Right-click a task \u2192 Set Reminder. Choose a preset or pick a custom date/time. Supports repeat intervals."),
+            ("Drag groups", "Drag a group's header to rearrange your task groups. Drop it between other groups — a line shows where it lands."),
+            ("Drag text out", "Drag a task's text into Notepad, a browser, or any text field → it pastes as plain text."),
+            ("Task reminders", "Right-click a task → Set Reminder. Choose a preset or pick a custom date/time. Supports repeat intervals."),
+        ],
+        [
             ("Timer", "Click the timer icon in the title bar to start a countdown. Double-click a timer to edit its duration."),
+            ("History", "Click 🕒 to restore previously completed tasks. Newly archived tasks appear live while History is open. Use the search bar to filter entries."),
+            ("History: Clear All", "In the History panel, click Clear All to remove every archived task at once. Toggle 'Don't ask to delete' to skip confirmation."),
+            ("Undo toast", "After deleting a task, a short popup lets you Undo or click ✕ to dismiss it without undoing."),
         ],
         [
-            ("History", "Click \U0001f552 to restore previously completed tasks. Newly archived tasks appear live while History is open."),
-            ("Settings", "Click \u2699 to open Settings with 5 tabs: General, Appearance, Keyboard Shortcuts, Export, and Advanced."),
-            ("Overflow menu", "Click \u00b7\u00b7\u00b7 for quick access to Check for Updates, Send Feedback, and Support Nudge."),
-            ("Keyboard shortcuts", "Settings \u2192 Keyboard Shortcuts to customize shortcuts for History, Settings, Timer, and more."),
+            ("Settings", "Click ⚙ to open Settings with 6 tabs: General, Appearance, Keyboard Shortcuts, Export, Reminders, and Advanced."),
+            ("Overflow menu", "Click ··· for quick access to Check for Updates, Send Feedback, and Support Nudge."),
+            ("Keyboard shortcuts", "Settings → Keyboard Shortcuts to customize shortcuts for History, Settings, Timer, and more."),
+            ("Text size", "Settings → Appearance → adjust the Text Size slider to make task text larger or smaller."),
         ],
         [
-            ("Text size", "Settings \u2192 Appearance \u2192 adjust the Text Size slider to make task text larger or smaller."),
-            ("Themes", "Settings \u2192 Appearance \u2192 switch between Dark, Light, and OLED themes. Changes apply instantly."),
+            ("Themes", "Settings → Appearance → switch between Dark, Light, and OLED themes. Changes apply instantly."),
             ("Always on Top", "Press Alt+T to keep the window above others."),
             ("Pin to Desktop", "Alt+P pins the window to your desktop so it stays visible behind other windows."),
+            ("Start on Boot", "Settings → General → toggle Start on Boot to launch Nudge when you sign in."),
         ],
         [
-            ("Start on Boot", "Settings \u2192 General \u2192 toggle Start on Boot to launch Nudge when you sign in."),
             ("Export", "Press Ctrl+E or use the Export tab in Settings to export tasks as .txt, .md, or .csv."),
-            ("Check for updates", "Settings \u2192 General or click \U0001f504 in the title bar to check for new versions."),
-            ("Tray icon", "Right-click the tray icon to show the window or quit. The \u2716 close button minimizes to tray."),
-        ],
-        [
+            ("Check for updates", "Settings → General or click 🔄 in the title bar to check for new versions."),
+            ("Tray icon", "Right-click the tray icon to show the window or quit. The ✖ close button minimizes to tray."),
             ("Resize", "Drag any edge or corner of the window."),
-            ("Quick Quit", "Press Escape twice within 1 second to close the app."),
         ],
     ]
 
@@ -924,7 +971,40 @@ class SettingsDialog(GlassPanelDialog):
 
         return True
 
-    def _reset_shortcuts_to_defaults(self) -> None:
+    def _reset_active_tab_to_defaults(self) -> None:
+        tab = self._stack.currentIndex()
+        if tab == 0:
+            self._reset_general_tab_defaults()
+        elif tab == 1:
+            self._reset_appearance_tab_defaults()
+        elif tab == 2:
+            self._reset_shortcuts_tab_defaults()
+        elif tab == 3:
+            self._reset_export_tab_defaults()
+        elif tab == 4:
+            self._reset_reminders_tab_defaults()
+        elif tab == 5:
+            self._reset_advanced_tab_defaults()
+        elif tab == 6:
+            self._reset_help_tab_defaults()
+        self._mark_dirty()
+
+    def _reset_general_tab_defaults(self):
+        self.startup_cb.setChecked(False)
+        self.lock_cb.setChecked(False)
+        self.pin_cb.setChecked(False)
+        self.always_on_top_cb.setChecked(False)
+        self.check_updates_cb.setChecked(True)
+        self.boot_notification_cb.setChecked(True)
+
+    def _reset_appearance_tab_defaults(self):
+        idx = self.theme_combo.findData("dark")
+        if idx >= 0:
+            self.theme_combo.setCurrentIndex(idx)
+        self.text_size_slider.setValue(14)
+        self.opacity_slider.setValue(100)
+
+    def _reset_shortcuts_tab_defaults(self) -> None:
         defaults = {
             "history_shortcut_edit": "Ctrl+H",
             "settings_shortcut_edit": "Ctrl+,",
@@ -938,6 +1018,21 @@ class SettingsDialog(GlassPanelDialog):
             if edit is None:
                 continue
             edit.setKeySequence(QKeySequence.fromString(seq_str, QKeySequence.SequenceFormat.PortableText))
+
+    def _reset_export_tab_defaults(self):
+        idx = self.export_format_combo.findData("txt")
+        if idx >= 0:
+            self.export_format_combo.setCurrentIndex(idx)
+        self.export_include_history_cb.setChecked(False)
+
+    def _reset_reminders_tab_defaults(self):
+        pass
+
+    def _reset_advanced_tab_defaults(self):
+        self.groups_enabled_cb.setChecked(True)
+
+    def _reset_help_tab_defaults(self):
+        pass
 
     def _create_tab_label(self, text):
         label = QLabel(text)
@@ -1151,6 +1246,24 @@ class SettingsDialog(GlassPanelDialog):
             edit.setToolTip("Click and press the desired key combination to record it")
             edit.setKeySequence(self._load_sequence(self.state_manager.state.get(state_key), default_seq))
             edit.keySequenceChanged.connect(self._mark_dirty)
+
+            if attr_name == "toggle_tray_shortcut_edit":
+                def _on_tray_edit_focus(in_focus, _edit=edit):
+                    parent = self.parent()
+                    if parent is None:
+                        return
+                    if in_focus:
+                        if parent._tray_hotkey_id is not None:
+                            parent._hotkey_filter.unregister(parent._tray_hotkey_id)
+                            parent._tray_hotkey_id = None
+                    else:
+                        new_seq = _edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText)
+                        if new_seq:
+                            hid = parent._hotkey_filter.register(new_seq, parent._toggle_tray_visibility)
+                            if hid is not None:
+                                parent._tray_hotkey_id = hid
+                edit.installEventFilter(self)
+                edit._tray_focus_handler = _on_tray_edit_focus
             card_layout.addWidget(edit, 0, Qt.AlignmentFlag.AlignRight)
             setattr(self, attr_name, edit)
             shortcuts_layout.addWidget(card)
@@ -1270,23 +1383,39 @@ class SettingsDialog(GlassPanelDialog):
         )
         advanced_layout.addWidget(self.groups_enabled_cb)
 
+        advanced_layout.addStretch()
+
+        # ── Reminders Tab (content) ──
+        reminders_tab = QWidget()
+        reminders_layout = QVBoxLayout(reminders_tab)
+        reminders_layout.setContentsMargins(6, 8, 6, 6)
+        reminders_layout.setSpacing(12)
+
+        reminders_title = self._create_tab_label("Reminders")
+        reminders_layout.addWidget(reminders_title)
+
+        reminders_sep = QFrame()
+        reminders_sep.setObjectName("hSeparator")
+        reminders_sep.setFrameShape(QFrame.Shape.HLine)
+        reminders_sep.setFixedHeight(1)
+        reminders_layout.addWidget(reminders_sep)
+
         task_reminder_label = QLabel("Pending Task Reminders")
         set_label_point_size(task_reminder_label, 12)
         task_reminder_label.setStyleSheet("font-weight: 600;")
-        advanced_layout.addWidget(task_reminder_label)
+        reminders_layout.addWidget(task_reminder_label)
 
         self._task_reminder_list = QListWidget()
-        self._task_reminder_list.setMaximumHeight(120)
         self._task_reminder_list.itemDoubleClicked.connect(self._edit_task_reminder_from_list)
-        advanced_layout.addWidget(self._task_reminder_list)
+        reminders_layout.addWidget(self._task_reminder_list, 1)
 
         clear_reminder_btn = QPushButton("Clear Selected")
         clear_reminder_btn.setObjectName("ghostButton")
         clear_reminder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         clear_reminder_btn.clicked.connect(self._clear_selected_task_reminder)
-        advanced_layout.addWidget(clear_reminder_btn)
+        reminders_layout.addWidget(clear_reminder_btn)
 
-        advanced_layout.addStretch()
+        reminders_layout.addStretch()
 
         # ── Help Tab (content) ──
         help_tab = QWidget()
@@ -1321,13 +1450,14 @@ class SettingsDialog(GlassPanelDialog):
         self._sidebar_layout = QVBoxLayout()
         self._sidebar_layout.setSpacing(4)
         self._sidebar_layout.setContentsMargins(0, 0, 0, 0)
-        tab_names = ["General", "Appearance", "Keyboard shortcuts", "Export", "Advanced", "Help"]
+        tab_names = ["General", "Appearance", "Shortcuts", "Export", "Reminders", "Advanced", "Help"]
         self._page_buttons = []
         self._stack = QStackedWidget()
         self._stack.addWidget(general_tab)
         self._stack.addWidget(appearance_tab)
         self._stack.addWidget(shortcuts_tab)
         self._stack.addWidget(export_tab)
+        self._stack.addWidget(reminders_tab)
         self._stack.addWidget(advanced_tab)
         self._stack.addWidget(help_tab)
 
@@ -1354,7 +1484,7 @@ class SettingsDialog(GlassPanelDialog):
         self.reset_shortcuts_btn.setObjectName("ghostButton")
         self.reset_shortcuts_btn.setMinimumHeight(28)
         self.reset_shortcuts_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.reset_shortcuts_btn.clicked.connect(self._reset_shortcuts_to_defaults)
+        self.reset_shortcuts_btn.clicked.connect(self._reset_active_tab_to_defaults)
         right_column.addWidget(self.reset_shortcuts_btn)
 
         button_row = QHBoxLayout()
@@ -1384,6 +1514,48 @@ class SettingsDialog(GlassPanelDialog):
         self._has_unsaved_changes = False
         self._update_overlap_opacity()
         self._populate_task_reminder_list()
+        self._apply_entry_widget_theming()
+
+    def _apply_entry_widget_theming(self):
+        theme = get_theme(self._get_theme_id())
+        c = theme["colors"]
+        r = theme["radii"]
+        input_r = r.get("input", r.get("small", 4))
+        self.setStyleSheet(self.styleSheet() + f"""
+            QKeySequenceEdit {{
+                background: {c.get("input_bg", "rgba(0,0,0,40)")};
+                border: 1px solid {c.get("border", "rgba(255,255,255,60)")};
+                border-radius: {input_r}px;
+                color: {c.get("text", "#ffffff")};
+                padding: 2px 4px;
+            }}
+            QListWidget {{
+                background: {c.get("input_bg", "rgba(0,0,0,40)")};
+                border: 1px solid {c.get("border", "rgba(255,255,255,60)")};
+                border-radius: {input_r}px;
+                color: {c.get("text", "#ffffff")};
+            }}
+            QListWidget::item:selected {{
+                background: {c.get("accent", "#4fc3f7")};
+                color: {c.get("text", "#ffffff")};
+            }}
+            QComboBox {{
+                background: {c.get("input_bg", "rgba(0,0,0,40)")};
+                border: 1px solid {c.get("border", "rgba(255,255,255,60)")};
+                border-radius: {input_r}px;
+                color: {c.get("text", "#ffffff")};
+                padding: 2px 6px;
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                background: transparent;
+            }}
+            QFrame#nestedPanel {{
+                background: {c.get("tab_bg", "rgba(255,255,255,20)")};
+                border: 1px solid {c.get("border", "rgba(255,255,255,60)")};
+                border-radius: {input_r}px;
+            }}
+        """)
 
     def _on_pin_to_desktop_toggled(self, checked: bool):
         if checked:
@@ -1423,9 +1595,7 @@ class SettingsDialog(GlassPanelDialog):
             parent._show_whats_new()
 
     def _open_reminders_from_settings(self):
-        parent = self.parent()
-        if parent is not None and hasattr(parent, "_open_reminders"):
-            parent._open_reminders()
+        self._switch_page(4)
 
     def _open_support_from_settings(self):
         parent = self.parent()
@@ -1481,8 +1651,11 @@ class SettingsDialog(GlassPanelDialog):
 
     def _clear_selected_task_reminder(self):
         item = self._task_reminder_list.currentItem()
-        if item is not None:
-            self._clear_task_reminder_from_list(item)
+        if item is None:
+            return
+        if not ThemedMessageDialog.question(self, "Clear Reminder", "Are you sure you want to clear the selected reminder?"):
+            return
+        self._clear_task_reminder_from_list(item)
 
     def _on_export_all_groups_toggled(self, checked):
         self._export_group_bulk_update = True
@@ -1546,6 +1719,14 @@ class SettingsDialog(GlassPanelDialog):
             all_groups_checked=self._export_all_groups_cb.isChecked(),
         )
 
+    def eventFilter(self, obj, event):
+        if hasattr(obj, '_tray_focus_handler'):
+            if event.type() == QEvent.Type.FocusIn:
+                obj._tray_focus_handler(True)
+            elif event.type() == QEvent.Type.FocusOut:
+                obj._tray_focus_handler(False)
+        return super().eventFilter(obj, event)
+
     def save_changes(self):
         if not self._validate_shortcuts():
             return False
@@ -1590,7 +1771,7 @@ class SettingsDialog(GlassPanelDialog):
             if groups_changed:
                 self._populate_export_group_filter()
                 self._update_export_groups_filter()
-                parent.render_tasks()
+                parent.render_tasks()  # FIX-A1: groups changed — full re-render needed
             else:
                 parent.task_text_size = int(self.state_manager.state.get("taskTextSize", 14))
                 for row in parent.task_row_widgets.values():
@@ -1610,6 +1791,8 @@ class SettingsDialog(GlassPanelDialog):
                 parent,
                 normalize_theme_id(self.state_manager.state.get("theme", "dark")),
             )
+
+        self._apply_entry_widget_theming()
 
         return True
 
@@ -1688,7 +1871,6 @@ class MainWindow(QMainWindow):
         self._history_dialog = None
         self._settings_dialog = None
         self._export_dialog = None
-        self._resize_track_installed: set[int] = set()
         self._escape_count = 0
         self._escape_timer = QTimer(self)
         self._escape_timer.setSingleShot(True)
@@ -1697,6 +1879,7 @@ class MainWindow(QMainWindow):
 
         self._hotkey_filter = GlobalHotkeyFilter()
         QApplication.instance().installNativeEventFilter(self._hotkey_filter)
+        self._hotkey_filter.set_hwnd(int(self.winId()))
 
         self._escape_sc = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
         self._escape_sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
@@ -1712,7 +1895,7 @@ class MainWindow(QMainWindow):
         self.init_keyboard_shortcuts()
         
         # Render any loaded tasks on boot
-        self.render_tasks()
+        self.render_tasks()  # FIX-A1: initial load — full render required
         
         # Check for lingering tasks from yesterday and notify
         if self.app_state.get("showBootNotification", True):
@@ -1849,9 +2032,17 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(10000, lambda: setattr(self, '_tray_notified', False))
 
     def _show_from_tray(self):
+        self.show()
         self.showNormal()
         self.activateWindow()
         self.raise_()
+
+    def _minimize_to_tray(self):
+        self.hide()
+        if not getattr(self, '_tray_notified', False):
+            self._tray.show_message("Nudge", "Still running in tray. Right-click tray icon to quit.")
+            self._tray_notified = True
+            QTimer.singleShot(10000, lambda: setattr(self, '_tray_notified', False))
 
     def _quit_from_tray(self):
         self._force_quit = True
@@ -1907,7 +2098,7 @@ class MainWindow(QMainWindow):
 
         self._restore_window_geometry()
 
-        QTimer.singleShot(0, self.render_tasks)
+        QTimer.singleShot(0, self.render_tasks)  # FIX-A1: window restore — full render required
 
     def _check_and_prompt_update(self):
         def _check():
@@ -1948,7 +2139,8 @@ class MainWindow(QMainWindow):
 
     def _apply_window_layer(self):
         """Apply window layer (AoT / Pin to Desktop) without rebuilding task list."""
-        from src.backend.window_layer import compose_main_window_flags, reconcile_layer_settings
+        from src.backend.window_layer import (compose_main_window_flags,
+                                              reconcile_layer_settings)
         reconcile_layer_settings(self.app_state)
         flags = compose_main_window_flags(
             self.app_state.get("pinnedToDesktop", False),
@@ -1980,6 +2172,7 @@ class MainWindow(QMainWindow):
         self._apply_window_layer()
 
     def _toggle_pin_to_desktop_from_menu(self, checked: bool):
+        geo = self.geometry()
         self.app_state = self.state_manager.state
         self.app_state["pinnedToDesktop"] = checked
         if checked:
@@ -1987,13 +2180,17 @@ class MainWindow(QMainWindow):
         self.state_manager.save()
         self._apply_window_layer()
         self.apply_settings()
-        self.restoreGeometry(geo)
+        self.setGeometry(geo)
 
     def _toggle_always_on_top_via_shortcut(self):
         current = self.app_state.get("alwaysOnTop", False)
         self.toggle_always_on_top(not current)
 
     def _open_export_via_shortcut(self):
+        # FIX-D1: suppress shortcut when text editor has focus
+        focused = QApplication.focusWidget()
+        if focused and focused.inherits('QLineEdit'):
+            return
         self.run_export_dialog()
 
     def _toggle_tray_visibility(self):
@@ -2004,6 +2201,7 @@ class MainWindow(QMainWindow):
                 self._tray_notified = True
                 QTimer.singleShot(10000, lambda: setattr(self, '_tray_notified', False))
         else:
+            self.show()
             self.showNormal()
             self.activateWindow()
             self.raise_()
@@ -2011,12 +2209,11 @@ class MainWindow(QMainWindow):
     def _enable_resize_hover_tracking(self, root: QWidget) -> None:
         """Show resize cursors on window edges even when the pointer is over child widgets (M1)."""
         for widget in [root, *root.findChildren(QWidget)]:
-            widget_id = id(widget)
-            if widget_id in self._resize_track_installed:
+            if widget.property('resize_track_installed'):  # FIX-B1: widget property instead of id() set
                 continue
             widget.setMouseTracking(True)
             widget.installEventFilter(self)
-            self._resize_track_installed.add(widget_id)
+            widget.setProperty('resize_track_installed', True)  # FIX-B1
 
     def eventFilter(self, watched, event):
         if (
@@ -2071,7 +2268,24 @@ class MainWindow(QMainWindow):
         # We use purely FramelessWindowHint so it appears as a standard Windows app on the taskbar.
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAutoFillBackground(False)
+        pal = self.palette()
+        pal.setColor(self.backgroundRole(), Qt.GlobalColor.transparent)
+        self.setPalette(pal)
         self.setMouseTracking(True)
+
+        # Disable DWM shadow for frameless window
+        try:
+            hwnd = int(self.winId())
+            DWMWA_NCRENDERING_POLICY = 2
+            DWMNCRP_DISABLED = 2
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd, DWMWA_NCRENDERING_POLICY,
+                ctypes.byref(ctypes.c_int(DWMNCRP_DISABLED)),
+                ctypes.sizeof(ctypes.c_int),
+            )
+        except Exception:
+            pass
         
         central_widget = QWidget()
         central_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -2176,6 +2390,7 @@ class MainWindow(QMainWindow):
         self.input_bar.setPlaceholderText("Add tasks (split by period)...")
         self.input_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.input_bar.returnPressed.connect(self.process_input)
+        self.input_bar.setDragEnabled(True)
         layout.addWidget(self.input_bar)
         self._refresh_group_combo()
         
@@ -2197,6 +2412,11 @@ class MainWindow(QMainWindow):
         self._flat_drop_indicator.setObjectName("dropIndicator")
         self._flat_drop_indicator.setFixedHeight(3)
         self._flat_drop_indicator.hide()
+
+        self._group_drop_indicator = QFrame(self.tasks_widget)
+        self._group_drop_indicator.setObjectName("dropIndicator")
+        self._group_drop_indicator.setFixedHeight(3)
+        self._group_drop_indicator.hide()
 
         self.scroll_area.setWidget(self.tasks_widget)
         layout.addWidget(self.scroll_area, stretch=1)
@@ -2302,6 +2522,10 @@ class MainWindow(QMainWindow):
         if self.always_on_top_shortcut is not None:
             self.always_on_top_shortcut.setParent(None)
             self.always_on_top_shortcut.deleteLater()
+        if self.toggle_tray_shortcut is not None:
+            self.toggle_tray_shortcut.setParent(None)
+            self.toggle_tray_shortcut.deleteLater()
+            self.toggle_tray_shortcut = None
         if self._tray_hotkey_id is not None:
             self._hotkey_filter.unregister(self._tray_hotkey_id)
             self._tray_hotkey_id = None
@@ -2310,11 +2534,11 @@ class MainWindow(QMainWindow):
             self.export_shortcut.deleteLater()
 
         self.history_shortcut = QShortcut(history_sequence, self)
-        self.history_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        self.history_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)  # FIX-D1: prevent theft from QLineEdit, also works when child dialogs have focus
         self.history_shortcut.activated.connect(self.open_history)
 
         self.settings_shortcut = QShortcut(settings_sequence, self)
-        self.settings_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+        self.settings_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)  # FIX-D1
         self.settings_shortcut.activated.connect(self.open_settings)
 
         self.pin_shortcut = QShortcut(pin_sequence, self)
@@ -2336,7 +2560,7 @@ class MainWindow(QMainWindow):
 
         if not export_sequence.isEmpty():
             self.export_shortcut = QShortcut(export_sequence, self)
-            self.export_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+            self.export_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)  # FIX-D1
             self.export_shortcut.activated.connect(self._open_export_via_shortcut)
 
     def process_input(self):
@@ -2385,20 +2609,33 @@ class MainWindow(QMainWindow):
                 self._flat_drag_hover_index = -1
                 event.acceptProposedAction()
                 return True
+            elif event.mimeData().hasFormat("application/x-nudge-group"):
+                event.acceptProposedAction()
+                return True
         elif event.type() == QEvent.Type.DragMove and obj is self.tasks_widget:
             if event.mimeData().hasFormat("application/x-nudge-task-row"):
                 self._update_flat_drop_indicator(event.position().toPoint())
                 event.acceptProposedAction()
                 return True
+            elif event.mimeData().hasFormat("application/x-nudge-group"):
+                self._update_group_drop_indicator(event.position().toPoint())
+                event.acceptProposedAction()
+                return True
         elif event.type() == QEvent.Type.DragLeave and obj is self.tasks_widget:
             self._flat_drop_indicator.hide()
+            self._group_drop_indicator.hide()
             event.accept()
             return True
         elif event.type() == QEvent.Type.Drop and obj is self.tasks_widget:
             self._flat_drop_indicator.hide()
+            self._group_drop_indicator.hide()
             source = event.source()
             if source is not None and hasattr(source, "_task_ref"):
                 self._on_flat_list_drop(source, event.position().toPoint())
+                event.acceptProposedAction()
+                return True
+            elif event.mimeData().hasFormat("application/x-nudge-group"):
+                self._on_group_drop(event.position().toPoint(), event.mimeData())
                 event.acceptProposedAction()
                 return True
         return super().eventFilter(obj, event)
@@ -2435,27 +2672,36 @@ class MainWindow(QMainWindow):
             self.group_combo.blockSignals(False)
 
     def _add_group_dialog(self) -> None:
-        name, accepted = QInputDialog.getText(self, "New Task Group", "Group name:")
-        if not accepted or not name.strip():
+        dlg = ThemedInputDialog(self, title="New Task Group", label="Group name:")
+        if not dlg.exec() == QDialog.DialogCode.Accepted:
+            return
+        name = dlg.get_text().strip()
+        if not name:
             return
         order = len(self.groups_data.get("groups", []))
         new_group = create_group(name, order)
         self.groups_data["groups"].append(new_group)
         self.group_store.save(self.groups_data)
         self._refresh_group_combo(new_group["id"])
-        self.render_tasks()
+        self.render_tasks()  # FIX-A1: group structure changed — full render required
 
     def _rename_group(self, group_id: str) -> None:
         group = group_by_id(self.groups_data, group_id)
         if group is None:
             return
-        name, accepted = QInputDialog.getText(self, "Rename Group", "Group name:", text=group["name"])
-        if not accepted or not name.strip():
+        dlg = ThemedInputDialog(self, title="Rename Group", label="Group name:", default_text=group["name"])
+        if not dlg.exec() == QDialog.DialogCode.Accepted:
             return
-        group["name"] = name.strip()
+        name = dlg.get_text().strip()
+        if not name:
+            return
+        group["name"] = name
         self.group_store.save(self.groups_data)
         self._refresh_group_combo(group_id)
-        self.render_tasks()
+        # FIX-A1: targeted section header update instead of full render_tasks
+        section = self.group_sections.get(group_id)
+        if section is not None:
+            section.refresh_header_count()
 
     def _delete_group(self, group_id: str) -> None:
         if group_id == GENERAL_GROUP_ID:
@@ -2477,7 +2723,7 @@ class MainWindow(QMainWindow):
         self.group_store.save(self.groups_data)
         self.store.save(self.tasks)
         self._refresh_group_combo(GENERAL_GROUP_ID)
-        self.render_tasks()
+        self.render_tasks()  # FIX-A1: group structure changed — full render required
 
     def _move_group_order(self, group_id: str, offset: int) -> None:
         groups = sorted_groups(self.groups_data)
@@ -2493,7 +2739,7 @@ class MainWindow(QMainWindow):
             group["order"] = order
         self.groups_data["groups"] = groups
         self.group_store.save(self.groups_data)
-        self.render_tasks()
+        self.render_tasks()  # FIX-A1: group structure changed — full render required
 
     def _show_group_header_menu(self, group_id: str, global_pos) -> None:
         menu = QMenu(self)
@@ -2539,6 +2785,8 @@ class MainWindow(QMainWindow):
         return tasks_for_group(self.tasks, group_id, include_done=True)
         
     def render_tasks(self):
+        # FIX-A1: Called only on initial load and group-structure changes.
+        # Use _on_task_added / _on_task_moved for incremental updates.
         self.tasks_widget.setUpdatesEnabled(False)
         while self.tasks_layout.count():
             child = self.tasks_layout.takeAt(0)
@@ -2566,7 +2814,7 @@ class MainWindow(QMainWindow):
                     content_indent=0,
                 )
                 self.tasks_layout.addWidget(row, 0, Qt.AlignmentFlag.AlignTop)
-                row._task_ref = task
+                row.set_task_ref(task)
                 self.task_row_widgets[id(task)] = row
         else:
             self.tasks_widget.setAcceptDrops(False)
@@ -2592,7 +2840,7 @@ class MainWindow(QMainWindow):
                         content_indent=8,
                     )
                     section.add_task_row(row)
-                    row._task_ref = task
+                    row.set_task_ref(task)
                     self.task_row_widgets[id(task)] = row
                 section._main_window = self
                 section.refresh_header_count()
@@ -2602,6 +2850,8 @@ class MainWindow(QMainWindow):
         self.tasks_layout.addStretch(1)
         self._sync_task_list_viewport_width()
         self._sync_task_row_text_layouts()
+        self._flat_drop_indicator.raise_()
+        self._group_drop_indicator.raise_()
         self.tasks_widget.setUpdatesEnabled(True)
         self._update_empty_state()
         import gc; gc.collect()
@@ -2643,7 +2893,7 @@ class MainWindow(QMainWindow):
             insert_index = len(group_tasks) - 1
             section.add_task_row(row, index=insert_index)
             section.refresh_header_count()
-        row._task_ref = task
+        row.set_task_ref(task)
         self.task_row_widgets[id(task)] = row
         self._sync_task_list_viewport_width()
         self._sync_task_row_text_layouts()
@@ -2653,6 +2903,7 @@ class MainWindow(QMainWindow):
         row = self.task_row_widgets.pop(id(task), None)
         if row is None:
             return
+        row._stop_countdown()
         groups_enabled = self.app_state.get("groupsEnabled", True)
         if groups_enabled:
             group_id = task.get("groupId", GENERAL_GROUP_ID)
@@ -2904,6 +3155,64 @@ class MainWindow(QMainWindow):
         self._flat_drop_indicator.setFixedWidth(self.tasks_widget.width())
         self._flat_drop_indicator.show()
 
+    def _update_group_drop_indicator(self, pos: QPoint) -> None:
+        from src.frontend.task_group_section import TaskGroupSection
+        sections = []
+        for i in range(self.tasks_layout.count()):
+            item = self.tasks_layout.itemAt(i)
+            w = item.widget() if item is not None else None
+            if isinstance(w, TaskGroupSection) and not w.isHidden():
+                sections.append(w)
+        if not sections:
+            self._group_drop_indicator.hide()
+            return
+        insert_idx = len(sections)
+        for i, s in enumerate(sections):
+            if pos.y() < s.y() + s.height() // 2:
+                insert_idx = i
+                break
+        y_pos = 0
+        if insert_idx < len(sections):
+            y_pos = sections[insert_idx].y() - 1
+        else:
+            y_pos = sections[-1].y() + sections[-1].height() - 1
+        self._group_drop_indicator.move(0, max(0, y_pos))
+        self._group_drop_indicator.setFixedWidth(self.tasks_widget.width())
+        self._group_drop_indicator.show()
+
+    def _on_group_drop(self, pos: QPoint, mime_data) -> None:
+        self._group_drop_indicator.hide()
+        group_id_bytes = mime_data.data("application/x-nudge-group").data()
+        if not group_id_bytes:
+            return
+        source_id = group_id_bytes.decode()
+        from src.frontend.task_group_section import TaskGroupSection
+        sections = []
+        for i in range(self.tasks_layout.count()):
+            item = self.tasks_layout.itemAt(i)
+            w = item.widget() if item is not None else None
+            if isinstance(w, TaskGroupSection) and not w.isHidden():
+                sections.append(w)
+        target_idx = len(sections)
+        for i, s in enumerate(sections):
+            if pos.y() < s.y() + s.height() // 2:
+                target_idx = i
+                break
+        groups = self.groups_data.get("groups", [])
+        src_idx = next((i for i, g in enumerate(groups) if g["id"] == source_id), -1)
+        if src_idx < 0:
+            return
+        if src_idx == target_idx or (src_idx < target_idx and target_idx - 1 == src_idx):
+            return
+        group = groups.pop(src_idx)
+        if target_idx > src_idx:
+            target_idx -= 1
+        groups.insert(target_idx, group)
+        for i, g in enumerate(groups):
+            g["order"] = i
+        self.group_store.save(self.groups_data)
+        self.render_tasks()
+
     def _on_row_dropped(self, row_widget, target_group_id, insert_index):
         task_ref = getattr(row_widget, "_task_ref", None)
         if task_ref is None:
@@ -2944,6 +3253,8 @@ class MainWindow(QMainWindow):
         self._sync_task_row_text_layouts()
 
     def delete_task(self, task_ref):
+        if not ThemedMessageDialog.question(self, "Delete Task", "Are you sure you want to delete this task? This cannot be undone."):
+            return
         if task_ref in self.tasks:
             self.tasks.remove(task_ref)
             self.store.save(self.tasks)
@@ -2961,13 +3272,13 @@ class MainWindow(QMainWindow):
         if task_ref not in self.tasks:
             return
 
+        original_index = self.tasks.index(task_ref)
+
         archived_task = dict(task_ref)
         archived_task["done"] = True
         archived_task["completedAt"] = datetime.now().isoformat()
 
-        history = self.history_store.load()
-        history.append(archived_task)
-        self.history_store.save(history)
+        self.history_store.append_and_save(archived_task)  # FIX-B2: atomic append
 
         self.tasks.remove(task_ref)
         self.store.save(self.tasks)
@@ -2975,12 +3286,20 @@ class MainWindow(QMainWindow):
         if self._history_dialog is not None:
             self._history_dialog.add_external_archived_task(archived_task)
 
+        archived_task["_archivedFromIndex"] = original_index
         self._last_archived_task = archived_task
         self._show_undo_toast(task_ref.get("text", "Task"))
 
     def _show_undo_toast(self, task_text):
         toast = UndoToast(self, f"Completed: {task_text}", self._undo_last_archive)
+        toast.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint
+        )
+        toast._apply_theme()
+        toast._reposition()
         toast.show()
+        toast.raise_()
 
     def _undo_last_archive(self):
         task = self._last_archived_task
@@ -3006,6 +3325,8 @@ class MainWindow(QMainWindow):
         self.store.save(self.tasks)
 
     def restore_task_from_history(self, task_ref):
+        original_index = task_ref.pop("_archivedFromIndex", None)
+
         history = self.history_store.load()
         if task_ref in history:
             history.remove(task_ref)
@@ -3014,9 +3335,14 @@ class MainWindow(QMainWindow):
         restored_task = dict(task_ref)
         restored_task["done"] = False
         restored_task.pop("completedAt", None)
-        self.tasks.append(restored_task)
+
+        if original_index is not None and 0 <= original_index <= len(self.tasks):
+            self.tasks.insert(original_index, restored_task)
+        else:
+            self.tasks.append(restored_task)
+
         self.store.save(self.tasks)
-        self._append_task_row_widget(restored_task)
+        self.render_tasks()
 
     def contextMenuEvent(self, event):
         context_menu = QMenu(self)
@@ -3052,20 +3378,23 @@ class MainWindow(QMainWindow):
 
     def clear_completed_tasks(self):
         completed = [t for t in self.tasks if t.get("done", False)]
-        
+        if not completed:
+            return
+        if not ThemedMessageDialog.question(self, "Clear Completed Tasks", "Are you sure you want to clear all completed tasks? They will be moved to history."):
+            return
+
         # Save completed tasks to history
-        if completed:
-            history = self.history_store.load()
-            for task in completed:
-                archived_task = dict(task)
-                archived_task["done"] = True
-                archived_task["completedAt"] = datetime.now().isoformat()
-                history.append(archived_task)
-            self.history_store.save(history)
-            
+        history = self.history_store.load()
+        for task in completed:
+            archived_task = dict(task)
+            archived_task["done"] = True
+            archived_task["completedAt"] = datetime.now().isoformat()
+            history.append(archived_task)
+        self.history_store.save(history)
+
         self.tasks = [t for t in self.tasks if not t.get("done", False)]
         self.store.save(self.tasks)
-        self.render_tasks()
+        self.render_tasks()  # FIX-A1: clear completed — many tasks affected, full render OK
 
     def _place_dialog_near_geometry(
         self,
@@ -3201,6 +3530,10 @@ class MainWindow(QMainWindow):
         dialog.deleteLater()
 
     def open_history(self):
+        # FIX-D1: suppress shortcut when text editor has focus
+        focused = QApplication.focusWidget()
+        if focused and focused.inherits('QLineEdit'):
+            return
         if self._history_dialog is not None:
             self._history_dialog.close()
             return
@@ -3217,6 +3550,10 @@ class MainWindow(QMainWindow):
         self._run_side_dialog(dialog)
 
     def open_settings(self):
+        # FIX-D1: suppress shortcut when text editor has focus
+        focused = QApplication.focusWidget()
+        if focused and focused.inherits('QLineEdit'):
+            return
         if self._settings_dialog is not None:
             self._settings_dialog.close()
             return
@@ -3268,6 +3605,9 @@ class MainWindow(QMainWindow):
                     task.pop("reminderFired", None)
                     task.pop("reminderRepeat", None)
                 found = True
+                row = self.task_row_widgets.get(id(task))
+                if row is not None:
+                    row.set_task_ref(task)
         if found:
             self.store.save(self.tasks)
 
@@ -3280,6 +3620,9 @@ class MainWindow(QMainWindow):
         else:
             task_ref.pop("reminderRepeat", None)
         self.store.save(self.tasks)
+        row = self.task_row_widgets.get(id(task_ref))
+        if row is not None:
+            row.set_task_ref(task_ref)
 
     def _set_task_reminder_at_time(self, task_ref, time_str: str, days_ahead: int = 0):
         now = datetime.now()
@@ -3293,15 +3636,21 @@ class MainWindow(QMainWindow):
         task_ref["reminderFired"] = False
         task_ref.pop("reminderRepeat", None)
         self.store.save(self.tasks)
+        row = self.task_row_widgets.get(id(task_ref))
+        if row is not None:
+            row.set_task_ref(task_ref)
 
     def _clear_task_reminder(self, task_ref):
         task_ref.pop("reminderAt", None)
         task_ref.pop("reminderFired", None)
         task_ref.pop("reminderRepeat", None)
         self.store.save(self.tasks)
+        row = self.task_row_widgets.get(id(task_ref))
+        if row is not None:
+            row.set_task_ref(task_ref)
 
     def _show_custom_reminder_dialog(self, task_ref):
-        from PyQt6.QtCore import QDate, QDateTime, QTime
+        from PyQt6.QtCore import QDate, QTime
 
         theme_id = normalize_theme_id(self.app_state.get("theme", "dark"))
         theme = get_theme(theme_id)
@@ -3404,6 +3753,9 @@ class MainWindow(QMainWindow):
         preview_label.setWordWrap(True)
         layout.addWidget(preview_label)
 
+        # Store the computed target datetime (with seconds) for duration-based setting
+        _computed_target = [None]
+
         # 6.2: Confirmation label (initially hidden)
         confirm_label = QLabel()
         confirm_label.setStyleSheet("font-size: 11px; color: #4ade80; font-weight: 600;")
@@ -3455,8 +3807,12 @@ class MainWindow(QMainWindow):
                               q_time.hour(), q_time.minute())
             preview_label.setText(f"Will remind at: {target.strftime('%A, %d %b %Y at %H:%M')}")
 
-        date_edit.dateChanged.connect(lambda _: _update_preview())
-        time_edit.timeChanged.connect(lambda _: _update_preview())
+        def _on_picker_changed(_):
+            _computed_target[0] = None
+            _update_preview()
+
+        date_edit.dateChanged.connect(_on_picker_changed)
+        time_edit.timeChanged.connect(_on_picker_changed)
         _update_preview()
 
         # -- Duration input handler --
@@ -3478,6 +3834,7 @@ class MainWindow(QMainWindow):
             else:
                 delta = timedelta(minutes=amount)
             target = datetime.now() + delta
+            _computed_target[0] = target
             date_edit.setDate(QDate(target.year, target.month, target.day))
             time_edit.setTime(QTime(target.hour, target.minute))
             _update_preview()
@@ -3523,12 +3880,16 @@ class MainWindow(QMainWindow):
         refresh_glass_shells(dlg, theme_id)
 
         if dlg.exec():
-            q_date = date_edit.date()
-            q_time = time_edit.time()
-            reminder_dt = datetime(
-                q_date.year(), q_date.month(), q_date.day(),
-                q_time.hour(), q_time.minute(), q_time.second(),
-            )
+            if _computed_target[0] is not None:
+                reminder_dt = _computed_target[0]
+                _computed_target[0] = None
+            else:
+                q_date = date_edit.date()
+                q_time = time_edit.time()
+                reminder_dt = datetime(
+                    q_date.year(), q_date.month(), q_date.day(),
+                    q_time.hour(), q_time.minute(), q_time.second(),
+                )
             if reminder_dt <= datetime.now():
                 from PyQt6.QtWidgets import QMessageBox as _MB
                 _MB.warning(dlg, "Invalid Time", "Reminder time must be in the future.")
@@ -3540,6 +3901,9 @@ class MainWindow(QMainWindow):
             else:
                 task_ref.pop("reminderRepeat", None)
             self.store.save(self.tasks)
+            row = self.task_row_widgets.get(id(task_ref))
+            if row is not None:
+                row.set_task_ref(task_ref)
 
     def _show_overflow_menu(self):
         self._style_overflow_menu()
@@ -3575,7 +3939,7 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def _open_feedback_dialog(self):
-        import json, sys, webbrowser
+        import json
         from urllib.parse import quote
         state_text = json.dumps(self.app_state, indent=2)
         dialog = FeedbackDialog(self, state_text)

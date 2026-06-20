@@ -1,5 +1,5 @@
 """
-History list row — click text to restore (Stage 9).
+History list row — double-click text to restore (Stage 9).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from src.frontend.responsive_text import ResponsiveTextRowHelper, configure_wrap
 
 
 class HistoryEntryLabel(QLabel):
-    """History text that restores the entry on click."""
+    """History text that restores the entry on double-click."""
 
     def __init__(self, text: str, on_click: Optional[Callable[[], None]] = None, parent=None):
         super().__init__(text, parent)
@@ -21,14 +21,14 @@ class HistoryEntryLabel(QLabel):
         self.setObjectName("historyEntryLabel")
         configure_wrapping_label(self)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip("Click to restore to the task list")
+        self.setToolTip("Double-click to restore to the task list")
 
-    def mousePressEvent(self, event):
+    def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self._on_click is not None:
             self._on_click()
             event.accept()
             return
-        super().mousePressEvent(event)
+        super().mouseDoubleClickEvent(event)
 
 
 class HistoryRowWidget(QWidget):

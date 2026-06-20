@@ -253,6 +253,22 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
         "\ud83d\udc1b Bug Fixes\n"
         "  \u2022 Eliminated ~400 lines of duplicated frameless-window setup across all dialogs"
     ),
+    "1.10.0": (
+        "\ud83e\uddfa Drag to Reorder Groups\n"
+        "  \u2022 Drag a group\u2019s header bar to rearrange your task groups in any order\n"
+        "  \u2022 A blue line shows exactly where the group will land\n"
+        "  \u2022 Drag a group into Notepad to paste its name and task list as plain text\n"
+        "\n"
+        "\U0001f50d History Improvements\n"
+        "  \u2022 Search bar in History \u2014 type to filter archived tasks live\n"
+        "  \u2022 Toggle \u201cDon\u2019t ask to delete\u201d to skip confirmation when clearing history\n"
+        "  \u2022 Clear All button to archive everything in one click\n"
+        "\n"
+        "\ud83d\udcfd Other Improvements\n"
+        "  \u2022 Undo toast now has a \u2716 dismiss button to close without undoing\n"
+        "  \u2022 Input bars scroll sideways for long task text\n"
+        "  \u2022 Undo popup is wider so messages fit better"
+    ),
 }
 
 
