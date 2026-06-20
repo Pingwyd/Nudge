@@ -657,7 +657,7 @@ def ghost_button_stylesheet(theme: Dict[str, Any]) -> str:
             border: 1px solid {_c(theme, "border")};
             border-radius: {_r(theme, "button")}px;
             font-size: 14px;
-            padding: 8px 12px;
+            padding: 8px 4px;
             min-height: 32px;
         }}
         QPushButton#ghostButton:hover {{
@@ -830,6 +830,7 @@ def build_application_stylesheet(theme: Dict[str, Any] | None = None) -> str:
     """Full app QSS generated from the theme dictionary."""
     theme = theme or DARK_THEME
     sections = [
+        "QMainWindow { background: transparent; }",
         glass_panel_stylesheet(theme),
         transparent_surface_stylesheet(),
         nested_panel_stylesheet(theme),
