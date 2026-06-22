@@ -269,6 +269,21 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
         "  \u2022 Input bars scroll sideways for long task text\n"
         "  \u2022 Undo popup is wider so messages fit better"
     ),
+    "1.11.0": (
+        "\u2728 Liquid Glass Aesthetic\n"
+        "  \u2022 Frosted glass panels now have subtle drop shadows and glow effects\n"
+        "  \u2022 Mouse-following glass shine over the task list (toggle in Settings)\n"
+        "  \u2022 Crisp SVG icons for Settings and History in the title bar\n"
+        "  \u2022 Input fields glow with your accent color when focused\n"
+        "\n"
+        "\ud83d\udc1b Live Settings\n"
+        "  \u2022 Opacity, text size, and mouse glow now apply instantly as you adjust\n"
+        "  \u2022 Task text size changes apply to all rows without clicking Save\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Liquid glass transparency now applies on first launch\n"
+        "  \u2022 Window corners no longer show black box edges on startup"
+    ),
 }
 
 

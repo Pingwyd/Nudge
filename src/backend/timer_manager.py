@@ -27,6 +27,7 @@ class TimerConfig:
         next_trigger_at: float | None = None,
         created_at: float | None = None,
         enabled: bool = True,
+        task_id: str | None = None,
     ):
         self.timer_id = timer_id or uuid.uuid4().hex[:12]
         self.name = name
@@ -35,6 +36,7 @@ class TimerConfig:
         self.next_trigger_at = next_trigger_at or (_now_ts() + interval_seconds)
         self.created_at = created_at or _now_ts()
         self.enabled = enabled
+        self.task_id = task_id
 
     def to_dict(self) -> dict:
         return {
@@ -45,6 +47,7 @@ class TimerConfig:
             "nextTriggerAt": self.next_trigger_at,
             "createdAt": self.created_at,
             "enabled": self.enabled,
+            "taskId": self.task_id,
         }
 
     @classmethod
@@ -57,6 +60,7 @@ class TimerConfig:
             next_trigger_at=d.get("nextTriggerAt"),
             created_at=d.get("createdAt"),
             enabled=d.get("enabled", True),
+            task_id=d.get("taskId"),
         )
 
 
@@ -79,12 +83,49 @@ class TimerManager(QObject):
     def to_list(self) -> list[dict]:
         return [cfg.to_dict() for cfg in self._timers.values()]
 
-    def add(self, name: str, interval_seconds: int, repeat: bool) -> TimerConfig:
-        cfg = TimerConfig(name=name, interval_seconds=interval_seconds, repeat=repeat)
+    def add(self, name: str, interval_seconds: int, repeat: bool, task_id: str | None = None) -> TimerConfig:
+        cfg = TimerConfig(name=name, interval_seconds=interval_seconds, repeat=repeat, task_id=task_id)
         self._timers[cfg.timer_id] = cfg
         if cfg.enabled:
             self._start_qt_timer(cfg)
         return cfg
+
+    def add_task_reminder(
+        self,
+        task_id: str,
+        name: str,
+        trigger_at: datetime | str,
+        repeat_minutes: int = 0,
+    ) -> str:
+        if isinstance(trigger_at, str):
+            trigger_at = datetime.fromisoformat(trigger_at)
+        trigger_epoch = trigger_at.timestamp()
+        repeat = repeat_minutes > 0
+        interval = repeat_minutes * 60 if repeat else 0
+        cfg = TimerConfig(name=name, interval_seconds=interval, repeat=repeat, task_id=task_id)
+        cfg.next_trigger_at = trigger_epoch
+        self._timers[cfg.timer_id] = cfg
+        if cfg.enabled:
+            self._start_qt_timer(cfg)
+        return cfg.timer_id
+
+    def get_timer_for_task(self, task_id: str) -> TimerConfig | None:
+        for cfg in self._timers.values():
+            if cfg.task_id == task_id:
+                return cfg
+        return None
+
+    def cancel_task_reminder(self, task_id: str) -> bool:
+        cfg = self.get_timer_for_task(task_id)
+        if cfg is None:
+            return False
+        self.remove(cfg.timer_id)
+        return True
+
+    def get_repeat_minutes(self, cfg: TimerConfig) -> int:
+        if not cfg.repeat:
+            return 0
+        return cfg.interval_seconds // 60
 
     def remove(self, timer_id: str) -> None:
         self._timers.pop(timer_id, None)

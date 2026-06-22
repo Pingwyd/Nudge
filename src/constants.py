@@ -153,9 +153,6 @@ EXPORT_COMBO_HEIGHT = 26
 EXPORT_GROUP_SCROLL_MIN = 36
 ADD_GROUP_BTN_SIZE = (32, 28)
 
-# Text truncation
-REMINDER_LIST_TEXT_MAX = 60     # max chars in reminder list task name
-
 # Feedback dialog
 FEEDBACK_MAX_CHARS = 1000
 

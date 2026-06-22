@@ -53,6 +53,10 @@ DARK_THEME: Dict[str, Any] = {
         "glass_overlap_solid": "rgba(18, 18, 18, 255)",
         "accent": "#4fc3f7",
         "muted": "#666666",
+        "toggle_on": "#4fc3f7",
+        "toggle_off": "#666666",
+        "input_focus_glow": "0 0 8px rgba(79, 195, 247, 0.2)",
+        "dialog_shadow": "0 8px 32px rgba(0, 0, 0, 0.4)",
     },
     "radii": {
         "window": 20,
@@ -111,6 +115,10 @@ LIGHT_THEME: Dict[str, Any] = {
         "glass_overlap_solid": "rgba(248, 248, 250, 255)",
         "accent": "#007AFF",
         "muted": "#8e8e93",
+        "toggle_on": "#007AFF",
+        "toggle_off": "#c7c7cc",
+        "input_focus_glow": "0 0 6px rgba(0, 122, 255, 0.15)",
+        "dialog_shadow": "0 4px 16px rgba(0, 0, 0, 0.15)",
     },
     "radii": deepcopy(DARK_THEME["radii"]),
     "fonts": deepcopy(DARK_THEME["fonts"]),
@@ -156,6 +164,10 @@ OLED_THEME: Dict[str, Any] = {
         "glass_overlap_solid": "rgba(0, 0, 0, 255)",
         "accent": "#4fc3f7",
         "muted": "#666666",
+        "toggle_on": "#4fc3f7",
+        "toggle_off": "#666666",
+        "input_focus_glow": "0 0 8px rgba(79, 195, 247, 0.25)",
+        "dialog_shadow": "0 8px 32px rgba(0, 0, 0, 0.6)",
     },
     "radii": deepcopy(DARK_THEME["radii"]),
     "fonts": deepcopy(DARK_THEME["fonts"]),
@@ -184,6 +196,69 @@ def _c(theme: Dict[str, Any], key: str) -> str:
 
 def _chrome_button_color(theme: Dict[str, Any]) -> str:
     return theme["colors"].get("chrome_icon", _c(theme, "text"))
+
+
+def generate_svg_icon(icon_type: str, color: str, size: int = 24) -> str:
+    """Generate SVG icon with specified color."""
+    svgs = {
+        "settings": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
+            <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7z" stroke="{color}" stroke-width="2"/>
+            <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58z" stroke="{color}" stroke-width="2"/>
+        </svg>''',
+        "history": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="{color}" stroke-width="2"/>
+            <path d="M12 7v5l3 3" stroke="{color}" stroke-width="2" stroke-linecap="round"/>
+        </svg>''',
+        "search": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="7" stroke="{color}" stroke-width="2"/>
+            <path d="M16 16l5 5" stroke="{color}" stroke-width="2" stroke-linecap="round"/>
+        </svg>''',
+        "close": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
+            <path d="M6 6l12 12M18 6L6 18" stroke="{color}" stroke-width="2" stroke-linecap="round"/>
+        </svg>''',
+        "chevron": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
+            <path d="M9 6l6 6-6 6" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>''',
+        "plus": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
+            <path d="M12 5v14M5 12h14" stroke="{color}" stroke-width="2" stroke-linecap="round"/>
+        </svg>''',
+        "trash": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
+            <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" stroke="{color}" stroke-width="2" stroke-linecap="round"/>
+        </svg>''',
+        "edit": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
+            <path d="M15.232 5.232l3.536 3.536M9 13l-2 6 6-2 9.586-9.586a2 2 0 000-2.828l-.708-.708a2 2 0 00-2.828 0L9 13z" stroke="{color}" stroke-width="2" stroke-linecap="round"/>
+        </svg>''',
+        "bell": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
+            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="{color}" stroke-width="2" stroke-linecap="round"/>
+        </svg>''',
+        "export": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>''',
+        "timer": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="13" r="8" stroke="{color}" stroke-width="2"/>
+            <path d="M12 9v4l2 2M10 2h4" stroke="{color}" stroke-width="2" stroke-linecap="round"/>
+        </svg>''',
+    }
+    return svgs.get(icon_type, "")
+
+
+def svg_to_pixmap(svg_str: str, size: int = 24) -> "QPixmap":
+    """Convert SVG string to QPixmap."""
+    from PyQt6.QtGui import QPixmap, QPainter
+    from PyQt6.QtSvg import QSvgRenderer
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    renderer = QSvgRenderer(bytearray(svg_str.encode()))
+    painter = QPainter(pixmap)
+    renderer.render(painter)
+    painter.end()
+    return pixmap
+
+
+def get_icon_color(theme_id: str) -> str:
+    """Get appropriate icon color for theme."""
+    theme = get_theme(theme_id)
+    return theme["colors"].get("icon", theme["colors"]["text"])
 
 
 def _r(theme: Dict[str, Any], key: str) -> int:

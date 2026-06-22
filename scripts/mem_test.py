@@ -47,7 +47,6 @@ if __name__ == "__main__":
         "groupsEnabled": True,
         "aotPinned": False,
         "autoStartEnabled": False,
-        "reminderInterval": 30,
     }
     mock_mgr = MagicMock()
     mock_mgr.state = mock_state
