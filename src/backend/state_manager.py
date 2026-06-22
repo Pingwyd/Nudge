@@ -50,7 +50,9 @@ class StateManager:
             "showBootNotification": True,
             "updateCheckUrl": "https://api.github.com/repos/Pingwyd/Nudge/releases/latest",
             "lastSeenVersion": "",
-            "lastChangelog": ""
+            "lastChangelog": "",
+            "cachedDownloadVersion": "",
+            "cachedDownloadPath": "",
         }
         self.app_name = "Nudge"
 
