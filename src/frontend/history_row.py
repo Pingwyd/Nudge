@@ -43,6 +43,7 @@ class HistoryRowWidget(QWidget):
         super().__init__(parent)
         self.on_delete = on_delete
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.setToolTip("Double-click to restore")
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(6, 4, 6, 4)

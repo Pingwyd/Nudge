@@ -5,6 +5,24 @@ All notable changes to Nudge are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-06-22
+
+### Added
+- **Liquid glass aesthetic upgrade** — frosted glass panels now have subtle drop shadows and glow effects on focused inputs.
+- **Mouse-following glass shine** — a soft radial glow follows your cursor over the task list, reinforcing the glass metaphor. Toggle in Settings → Appearance.
+- **SVG toolbar icons** — Settings and History buttons now use crisp vector icons that match the current theme color.
+- **Input glow on focus** — the Add Task bar and shortcut inputs glow with the accent color when active.
+- **Live appearance preview** — opacity slider, text size slider, and mouse glow toggle now apply immediately as you adjust them.
+
+### Changed
+- **Settings and History buttons** replaced emoji icons (⚙, 🕒) with themed SVG icons.
+- **DWM shadow fix** — window corners stay clean without black box edges on first launch.
+
+### Fixed
+- **Transparent background** — liquid glass transparency now applies correctly on first launch (not just after a refresh).
+- **Text size slider** — changes now apply live to all task rows without needing to click Save.
+- **Dev runner** — `dev.py` now handles app crashes gracefully and waits for file changes before restarting.
+
 ## [1.10.0] - 2026-06-20
 
 ### Added

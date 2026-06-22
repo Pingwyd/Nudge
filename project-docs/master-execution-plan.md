@@ -398,4 +398,234 @@ Sprint 4.5 (Input Scroll)                ─── independent
 
 ---
 
+## Phase 5 — UI Polish & New Features (v1.11)
+
+| # | Feature | Priority | Touches Existing Code |
+|---|---------|----------|----------------------|
+| 14 | Reminders Drawer (prototype) | High | Yes |
+| 15 | Double-Click Ambiguity (tooltips + feedback) | Medium | Yes |
+| 16 | Settings Modernization (icons, grid-cards, toggles) | Medium | Yes |
+| 17 | History Chronological Headers + Group Badges | Medium | Yes |
+| 18 | Liquid Glass Aesthetic Upgrade | Medium | Yes |
+| 19 | Information Density (Visual Cards) | Low | Yes |
+| 20 | Crash Report Client | Low | Yes |
+| 21 | Hover Glow Animation | Low | Yes |
+
+### Sprint 5: Reminders Drawer (Prototype)
+
+**Problem:** Users want the Reminders list to feel like part of the main app, not a separate floating window or a buried Settings tab. A sliding drawer provides a cohesive, app-integrated feel.
+
+**Approach:**
+- Create a `DrawerWidget` that slides out from the left side of the main window
+- The drawer overlays the task list (pushes content or floats on top)
+- Shows pending reminders with task name, countdown, and cancel button
+- Animated slide-in/slide-out using `QPropertyAnimation` on `maximumWidth`
+- Drawer opens via a button in the chrome bar (toolbar)
+- Drawer state persisted (open/closed) across sessions
+
+**Files to modify:**
+- `src/frontend/main_window.py` — new `DrawerWidget` class, chrome bar button, animation logic
+- `src/frontend/theme.py` — drawer styling for Dark/Light/OLED
+
+**Acceptance criteria:**
+- Drawer slides in from left with smooth animation
+- Shows all pending reminders with task name and countdown
+- Cancel button removes reminder from TimerManager
+- Drawer does NOT replace Settings Reminders tab (both exist for now)
+- Drawer state (open/closed) persists across sessions
+- Works in Dark, Light, and OLED themes
+
+---
+
+### Sprint 6: Double-Click Ambiguity (Tooltips + Feedback)
+
+**Problem:** Double-clicking a task toggles it as "done" (main window) or restores it (history), but there's no visual indicator that double-clicking does anything. Users only look for checkboxes.
+
+**Approach:**
+- Add tooltip on task hover in main window: "Double-click to complete"
+- Add tooltip on task hover in history: "Double-click to restore"
+- Add subtle visual feedback on double-click: brief flash/highlight animation on the row
+- Use `QToolTip` or custom tooltip styling for glass theme consistency
+
+**Files to modify:**
+- `src/frontend/main_window.py` — `TaskRowWidget` tooltip + flash animation
+- `src/frontend/history_row.py` — tooltip + flash animation
+
+**Acceptance criteria:**
+- Hovering over a task in main window shows "Double-click to complete" tooltip
+- Hovering over a task in history shows "Double-click to restore" tooltip
+- Double-clicking a task produces a brief visual flash/highlight (200-300ms)
+- Tooltip matches glass theme styling
+- No performance impact with many tasks
+
+---
+
+### Sprint 7: Settings Modernization
+
+**Problem:** Settings sidebar lacks visual appeal. Theme selection is plain text. Toggle switches are default OS style.
+
+**Approach:**
+- Add icons to sidebar navigation items (General, Appearance, Shortcuts, Export, Reminders, Advanced, Help)
+- Create grid-card layout for theme selection (Dark, Light, OLED as visual cards with preview)
+- Implement iOS-style toggle switches for boolean settings
+- Keep existing shortcut recorder (already implemented)
+
+**Files to modify:**
+- `src/frontend/main_window.py` — `SettingsDialog` sidebar, theme grid, toggle widgets
+- `src/frontend/theme.py` — toggle switch styling, grid-card styling, icon colors
+
+**Acceptance criteria:**
+- Sidebar shows icon + text for each settings tab
+- Theme selection displays as visual grid-cards with preview
+- Boolean settings use iOS-style toggle switches
+- All new widgets respect Dark/Light/OLED themes
+- Shortcut recorder still works as before
+
+---
+
+### Sprint 8: History Chronological Headers + Group Badges
+
+**Problem:** History list is a flat list of completed tasks. Users can't quickly find tasks from a specific day or group.
+
+**Approach:**
+- Group completed tasks under collapsible chronological headers (Today, Yesterday, This Week, Older)
+- Render colorful group badges instead of bracketed text `[Group]` — use group color from groups.json
+- Headers are collapsible (click to expand/collapse)
+- Keep existing search and "Don't Ask" checkbox from Sprints 4.1–4.2
+
+**Files to modify:**
+- `src/frontend/main_window.py` — `HistoryDialog` grouping logic, header widgets
+- `src/frontend/history_row.py` — badge rendering
+
+**Acceptance criteria:**
+- Tasks grouped under Today, Yesterday, This Week, Older headers
+- Headers are collapsible (click toggles visibility)
+- Group badges show group name with group color background
+- Existing search still filters across all groups
+- "Clear All" still clears all entries regardless of group
+
+---
+
+### Sprint 9: Liquid Glass Aesthetic Upgrade
+
+**Problem:** Current theme styling is functional but lacks premium feel. No glows, shadows, or dynamic icons.
+
+**Approach:**
+- Add subtle glow effects on focused inputs and buttons
+- Add premium drop shadows on dialogs and cards
+- Create programmatic SVG icons that adjust color per theme (light/dark/OLED)
+- Icons: settings gear, history clock, search magnifier, close X, chevron arrows
+- Cache rendered icons for performance
+
+**Files to modify:**
+- `src/frontend/theme.py` — glow/shadow styles, SVG icon generators
+- `src/frontend/main_window.py` — apply new icons to toolbar buttons
+
+**Acceptance criteria:**
+- Focused inputs show subtle glow effect
+- Dialogs/cards have drop shadows
+- SVG icons adjust color when switching themes
+- Icons are crisp at all sizes (16px, 24px, 32px)
+- No startup performance regression (icons cached)
+
+---
+
+### Sprint 10: Information Density (Visual Cards)
+
+**Problem:** General Settings tab is a long list of checkboxes without visual grouping. Hard to scan.
+
+**Approach:**
+- Group General tab settings into visual cards:
+  - **Startup & System:** Run on Startup, Check for Updates
+  - **Window Behavior:** Lock Position, Pin, Always on Top
+- Cards have subtle border, background, and header
+- Use card component from Sprint 7 (Settings Modernization)
+
+**Files to modify:**
+- `src/frontend/main_window.py` — `SettingsDialog` General tab layout
+
+**Acceptance criteria:**
+- General tab shows grouped visual cards
+- Each card has a header and relevant settings
+- Cards match glass theme styling
+- Settings values still persist correctly
+
+---
+
+### Sprint 11: Crash Report Client
+
+**Problem:** Crash dialog shows raw stack trace. Not user-friendly.
+
+**Approach:**
+- Redesign crash_dialog.py with empathetic error screen
+- Collapse raw stack trace into "Technical Details" expandable drawer
+- Add "Restart" button (relaunches app)
+- Add "Send Report" button (copies crash details to clipboard or saves to file)
+- Show friendly error message, not technical jargon
+
+**Files to modify:**
+- `src/frontend/crash_dialog.py` — full redesign
+
+**Acceptance criteria:**
+- Crash screen shows friendly error message
+- Technical Details drawer expands to show stack trace
+- "Restart" button relaunches the application
+- "Send Report" button copies crash details to clipboard
+- Dialog matches glass theme in all modes
+
+---
+
+### Sprint 12: Hover Glow Animation
+
+**Problem:** Main panel lacks interactive visual feedback. No sense of "glass" material.
+
+**Approach:**
+- Add "Glass Shine" animation that follows mouse cursor on main panel
+- Subtle radial gradient or glow effect that moves with cursor
+- Effect is subtle — reinforces glass metaphor without being distracting
+- Use `QGraphicsEffect` or custom `paintEvent` overlay
+
+**Files to modify:**
+- `src/frontend/main_window.py` — main panel hover effect
+- `src/frontend/theme.py` — glow effect parameters per theme
+
+**Acceptance criteria:**
+- Subtle glow follows cursor on main panel
+- Effect is visible in Dark and OLED themes (less visible in Light)
+- No performance impact with smooth cursor tracking
+- Effect disabled if user has reduced motion preference (if detectable)
+
+---
+
+## Dependency Graph (Phase 5)
+
+```
+S5  (Drawer)         ─── independent
+S6  (Double-Click)   ─── independent
+S7  (Settings Mod)   ─── independent
+S8  (History Headers)─── independent
+S9  (Liquid Glass)   ─── depends on S7 (icons/toggles need new theme tokens)
+S10 (Info Density)   ─── depends on S7 (visual cards use same card component)
+S11 (Crash Report)   ─── independent
+S12 (Hover Glow)     ─── depends on S9 (glow uses new theme tokens)
+```
+
+**Parallelizable:** S5, S6, S7, S8, S11 can all run in parallel.
+**Sequential:** S7 → S9 → S12, S7 → S10
+
+---
+
+## Risk Flags (Phase 5)
+
+| Risk | Mitigation |
+|------|-----------|
+| Drawer may conflict with existing Settings Reminders tab | Build as separate widget; don't remove Settings tab until confirmed |
+| Liquid Glass SVG icons may impact startup performance | Cache rendered icons; lazy-load on first theme apply |
+| Chronological headers require date parsing of completedAt | Use `datetime.fromisoformat()` (already imported) |
+| Crash report client needs actual crash data collection | Use `traceback.format_exception()` + sys info gathering |
+| Hover glow may cause lag on low-end GPUs | Make effect optional; disable if frame rate drops |
+| iOS-style toggles may not match native feel on Windows | Use custom QPainter rendering for consistent cross-platform look |
+
+---
+
 *End of master-execution-plan.md*

@@ -29,13 +29,63 @@
 - [ ] S4-F4-C3 — Group drag verification (MiMo V2.5)
 - [ ] S4-F5-C1 — Input bar horizontal scrolling (DeepSeek V4 Flash)
 
+## Sprint 5 — Reminders Drawer (Prototype)
+
+- [ ] S5-F1-C1 — Create DrawerWidget class (MiMo)
+- [ ] S5-F1-C2 — Add chrome bar button (DeepSeek)
+- [ ] S5-F1-C3 — Populate drawer with reminders (MiMo)
+- [ ] S5-F1-C4 — Persist drawer state (DeepSeek)
+
+## Sprint 6 — Double-Click Ambiguity
+
+- [ ] S6-F1-C1 — Add hover tooltips to TaskRowWidget (DeepSeek)
+- [ ] S6-F1-C2 — Add hover tooltips to HistoryRowWidget (DeepSeek)
+- [ ] S6-F1-C3 — Add double-click flash animation (MiMo)
+
+## Sprint 7 — Settings Modernization
+
+- [ ] S7-F1-C1 — Add icons to sidebar navigation (MiMo)
+- [ ] S7-F1-C2 — Create theme grid-card selection (MiMo)
+- [ ] S7-F1-C3 — Implement iOS-style toggle switches (MiMo)
+- [ ] S7-F1-C4 — Apply theme-aware styling (DeepSeek)
+
+## Sprint 8 — History Chronological Headers + Group Badges
+
+- [ ] S8-F1-C1 — Create chronological grouping logic (MiMo)
+- [ ] S8-F1-C2 — Create collapsible header widgets (MiMo)
+- [ ] S8-F1-C3 — Replace bracketed text with colorful group badges (DeepSeek)
+
+## Sprint 9 — Liquid Glass Aesthetic Upgrade
+
+- [ ] S9-F1-C1 — Add glow/shadow effects (MiMo)
+- [ ] S9-F1-C2 — Create SVG icon generators (MiMo)
+- [ ] S9-F1-C3 — Apply icons to toolbar buttons (DeepSeek)
+- [ ] S9-F1-C4 — Cache rendered icons (DeepSeek)
+
+## Sprint 10 — Information Density (Visual Cards)
+
+- [ ] S10-F1-C1 — Create SettingsCardWidget (MiMo)
+- [ ] S10-F1-C2 — Group General tab settings (DeepSeek)
+
+## Sprint 11 — Crash Report Client
+
+- [ ] S11-F1-C1 — Redesign crash dialog UI (MiMo)
+- [ ] S11-F1-C2 — Add Restart and Send Report buttons (DeepSeek)
+- [ ] S11-F1-C3 — Add Technical Details drawer (MiMo)
+
+## Sprint 12 — Hover Glow Animation
+
+- [ ] S12-F1-C1 — Create GlassShineEffect (MiMo)
+- [ ] S12-F1-C2 — Apply effect to main tasks panel (DeepSeek)
+- [ ] S12-F1-C3 — Make effect optional (DeepSeek)
+
 ---
 
 ## Summary
 
-- **Total sprints:** 4
-- **Total chunks:** 17
-- **MiMo chunks:** 4 (S1-F1-C1, S3-F1-C1, S4-F4-C1, S4-F4-C3)
-- **DeepSeek chunks:** 13 (all others)
-- **Critical path:** S4-F4-C1 → S4-F4-C2 → S4-F4-C3
-- **Parallelizable waves:** S1 Wave 1 (3 chunks), S2 Wave 1 (2 chunks), S3 Wave 1 (2 chunks), S4 Wave 1 (4 chunks)
+- **Total sprints:** 12
+- **Total chunks:** 35
+- **MiMo chunks:** 18 (S1-F1-C1, S3-F1-C1, S4-F4-C1, S4-F4-C3, S5-F1-C1, S5-F1-C3, S6-F1-C3, S7-F1-C1, S7-F1-C2, S7-F1-C3, S8-F1-C1, S8-F1-C2, S9-F1-C1, S9-F1-C2, S10-F1-C1, S11-F1-C1, S11-F1-C3, S12-F1-C1)
+- **DeepSeek chunks:** 17 (all others)
+- **Critical path:** S7 → S9 → S12 (Settings Modernization → Liquid Glass → Hover Glow)
+- **Parallelizable waves:** S5, S6, S7, S8, S11 (Phase 5 Wave 1)

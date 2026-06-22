@@ -55,6 +55,7 @@ class GlassPanelDialog(QDialog):
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._apply_always_on_top()
 
         self.bg_frame = QFrame(self)
         self.bg_frame.setObjectName("glassPanel")
@@ -74,6 +75,19 @@ class GlassPanelDialog(QDialog):
         return normalize_theme_id(
             getattr(parent, "app_state", {}).get("theme", "dark")
         )
+
+    def _apply_always_on_top(self):
+        parent = self.parent()
+        if parent is None:
+            return
+        if isinstance(parent, QDialog):
+            parent = parent.parent()
+        if parent is None:
+            return
+        if getattr(parent, "app_state", {}).get("alwaysOnTop", False):
+            flags = self.windowFlags()
+            flags |= Qt.WindowType.WindowStaysOnTopHint
+            self.setWindowFlags(flags)
 
     # ── Overlap detection ────────────────────────────────────────────
 
