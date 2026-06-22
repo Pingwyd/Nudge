@@ -339,3 +339,61 @@ document.querySelectorAll('.theme-card').forEach((card) => {
     card.style.background = '';
   });
 });
+
+// ── Download modal ───────────────────────────────────────────────
+const downloadModal = document.getElementById('download-modal');
+const countdownEl = document.getElementById('modal-countdown');
+const progressBar = document.getElementById('modal-progress-bar');
+const modalClose = document.getElementById('modal-close');
+let downloadUrl = '';
+let countdownInterval = null;
+
+document.querySelectorAll('.btn-download').forEach((btn) => {
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    downloadUrl = btn.href;
+    openDownloadModal();
+  });
+});
+
+function openDownloadModal() {
+  let seconds = 5;
+  countdownEl.textContent = seconds;
+  progressBar.style.transition = 'none';
+  progressBar.style.width = '0%';
+  downloadModal.classList.add('open');
+
+  // Trigger reflow then animate progress bar
+  void progressBar.offsetWidth;
+  progressBar.style.transition = 'width 5s linear';
+  progressBar.style.width = '100%';
+
+  countdownInterval = setInterval(() => {
+    seconds--;
+    countdownEl.textContent = seconds;
+    if (seconds <= 0) {
+      clearInterval(countdownInterval);
+      triggerDownload();
+      closeDownloadModal();
+    }
+  }, 1000);
+}
+
+function triggerDownload() {
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function closeDownloadModal() {
+  downloadModal.classList.remove('open');
+  if (countdownInterval) clearInterval(countdownInterval);
+}
+
+modalClose.addEventListener('click', closeDownloadModal);
+downloadModal.addEventListener('click', (e) => {
+  if (e.target === downloadModal) closeDownloadModal();
+});
