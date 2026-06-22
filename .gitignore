@@ -95,3 +95,6 @@ tasks_export.txt
 
 # ─── Prompt / instruction files (session context) ──────────────────────────
 prompt.md
+
+# ─── Project planning docs (local only) ────────────────────────────────────
+project-docs/
