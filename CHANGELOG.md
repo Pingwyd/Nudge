@@ -5,6 +5,20 @@ All notable changes to Nudge are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-06-22
+
+### Added
+- **Non-blocking update download** — the download progress dialog no longer freezes the app; you can keep working while the update downloads in the background.
+- **Install prompt after download** — when the download finishes, a themed dialog asks "Install Now" or "Remind Me Later" instead of auto-installing.
+- **Cached update downloads** — if you click "Remind Me Later", the downloaded file is saved. The next time you check for updates, it skips the download and goes straight to the install prompt.
+- **Progress bar improvements** — the progress bar now shows a spinner when the server doesn't report a file size, instead of staying stuck at 0%.
+
+### Fixed
+- **Progress bar stuck at 0%** — rewrote the PowerShell download fallback to stream progress via stdout instead of blocking with `-OutFile`.
+- **File lock errors on retry** — stale temp files from previous failed downloads are now cleaned up before each new download attempt.
+- **PowerShell download timeout** — added retry logic (2 attempts with 2s delay) for the PowerShell fallback path.
+- **Progress bar cycling** — progress no longer wraps back to 0% after 100MB when `Content-Length` is missing.
+
 ## [1.11.0] - 2026-06-22
 
 ### Added

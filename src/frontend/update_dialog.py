@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
@@ -8,7 +9,6 @@ from PyQt6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
-    QScrollArea,
     QTextBrowser,
     QTextEdit,
     QVBoxLayout,
@@ -20,7 +20,6 @@ from src.frontend.theme import get_theme, normalize_theme_id
 
 
 def _changelog_to_html(text: str) -> str:
-    """Convert plain-text changelog (emoji headers + bullet items) to styled HTML."""
     if not text:
         return "<p>No release notes available.</p>"
     lines = text.split("\n")
@@ -108,7 +107,7 @@ class UpdateInfoDialog(GlassPanelDialog):
 
 class DownloadThread(QThread):
     progress = pyqtSignal(int, int)
-    finished = pyqtSignal(bool, str)
+    finished = pyqtSignal(bool, str, str, str)
 
     def __init__(self, download_url: str, version: str, parent=None):
         super().__init__(parent)
@@ -116,8 +115,7 @@ class DownloadThread(QThread):
         self.version = version
 
     def run(self):
-        from src.backend.updater import download_update
-        from pathlib import Path
+        from src.backend.updater import download_update, _PLATFORM_EXT
         import tempfile
 
         temp_dir = Path(tempfile.gettempdir()) / "Nudge_update"
@@ -125,10 +123,15 @@ class DownloadThread(QThread):
             self.download_url, temp_dir, self.version,
             progress_callback=lambda dl, total: self.progress.emit(dl, total),
         )
-        self.finished.emit(path is not None, err)
+        if path is not None:
+            self.finished.emit(True, "", str(path), self.version)
+        else:
+            self.finished.emit(False, err, "", self.version)
 
 
 class DownloadDialog(GlassPanelDialog):
+    download_ready = pyqtSignal(str, str)
+
     def __init__(self, latest_version: str, download_url: str, parent=None):
         super().__init__(parent)
         self.latest_version = latest_version
@@ -198,47 +201,25 @@ class DownloadDialog(GlassPanelDialog):
 
     def _on_progress(self, downloaded: int, total: int):
         if total > 0:
-            pct = int(downloaded * 100 / total)
+            self.progress_bar.setRange(0, 100)
+            pct = min(int(downloaded * 100 / total), 99)
             self.progress_bar.setValue(pct)
             mb_dl = downloaded / (1024 * 1024)
             mb_total = total / (1024 * 1024)
             self.status_label.setText(f"{mb_dl:.1f} MB / {mb_total:.1f} MB")
         else:
-            pct = int(downloaded / 1024) % 100
-            self.progress_bar.setValue(min(pct, 99))
             mb_dl = downloaded / (1024 * 1024)
-            self.status_label.setText(f"{mb_dl:.1f} MB downloaded")
-        from PyQt6.QtWidgets import QApplication
-        QApplication.processEvents()
+            self.progress_bar.setRange(0, 0)
+            self.status_label.setText(f"Downloaded {mb_dl:.1f} MB\u2026")
 
-    def _on_finished(self, success: bool, error_msg: str = ""):
+    def _on_finished(self, success: bool, error_msg: str = "", path: str = "", version: str = ""):
         if not self.isVisible():
             return
         if success:
-            from pathlib import Path
-            import tempfile, sys
             self.progress_bar.setValue(100)
-            if getattr(sys, "frozen", False):
-                self.cancel_btn.setEnabled(False)
-                self.status_label.setText("Download complete! Installing...")
-                from src.backend.updater import _install_update, _PLATFORM_EXT
-                temp_dir = Path(tempfile.gettempdir()) / "Nudge_update"
-                asset_name = f"Nudge_{self.latest_version}{_PLATFORM_EXT}"
-                downloaded = temp_dir / asset_name
-                current_exe = Path(sys.executable)
-                _install_update(downloaded, current_exe)
-                self.close()
-                from PyQt6.QtWidgets import QApplication
-                from src.frontend.main_window import MainWindow
-                for w in QApplication.topLevelWindows():
-                    if isinstance(w, MainWindow):
-                        w._skip_close_confirm = True
-                        w._force_quit = True
-                        w.close()
-                        break
-            else:
-                self.status_label.setText("Downloaded (dev mode)")
-                self.cancel_btn.setText("Close")
+            self.status_label.setText("Download complete!")
+            self.download_ready.emit(path, version)
+            self.close()
         else:
             self.cancel_btn.setText("Close")
             detail = error_msg or "Download failed. Please try again later."
@@ -305,5 +286,102 @@ class DownloadDialog(GlassPanelDialog):
                 border: 1px solid {border};
                 border-radius: 6px;
                 padding: 4px;
+            }}
+        """)
+
+
+class InstallReadyDialog(GlassPanelDialog):
+    def __init__(self, latest_version: str, from_cache: bool = False, parent=None):
+        super().__init__(parent)
+        self.latest_version = latest_version
+        self.from_cache = from_cache
+        self._init_ui()
+
+    def _init_ui(self):
+        self.setWindowTitle("Update Ready")
+        self.resize(380, 200)
+        self.setMinimumSize(300, 180)
+
+        layout = QVBoxLayout(self.bg_frame)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        title = QLabel(f"Nudge v{self.latest_version} is ready to install")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        font = title.font()
+        font.setPointSize(14)
+        font.setBold(True)
+        title.setFont(font)
+        layout.addWidget(title)
+
+        if self.from_cache:
+            subtitle = QLabel("Previously downloaded — ready when you are.")
+        else:
+            subtitle = QLabel("The app will restart after installing.")
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subtitle.setWordWrap(True)
+        sfont = subtitle.font()
+        sfont.setPointSize(10)
+        subtitle.setFont(sfont)
+        layout.addWidget(subtitle)
+
+        layout.addStretch()
+
+        btn_row = QHBoxLayout()
+        later_btn = QPushButton("Remind Me Later")
+        later_btn.setObjectName("ghostButton")
+        later_btn.clicked.connect(self.reject)
+        btn_row.addWidget(later_btn)
+
+        install_btn = QPushButton("Install Now")
+        install_btn.setObjectName("primaryButton")
+        ifont = install_btn.font()
+        ifont.setBold(True)
+        install_btn.setFont(ifont)
+        install_btn.clicked.connect(self.accept)
+        btn_row.addWidget(install_btn)
+
+        layout.addLayout(btn_row)
+
+        self._apply_theme()
+
+    def _apply_theme(self):
+        parent = self.parent()
+        theme_id = normalize_theme_id(getattr(parent, "app_state", {}).get("theme", "dark")) if parent else "dark"
+        theme = get_theme(theme_id)
+        bg = theme["colors"].get("menu_bg", "rgba(30,30,30,240)")
+        border = theme["colors"].get("border", "rgba(255,255,255,60)")
+        text = theme["colors"].get("text", "#e0e0e0")
+        hover = theme["colors"].get("hover", "rgba(255,255,255,20)")
+
+        self.bg_frame.setStyleSheet(f"""
+            QWidget#glassPanel {{
+                background: {bg};
+                border-radius: 20px;
+                border: 1px solid {border};
+            }}
+            QLabel {{
+                color: {text};
+                background: transparent;
+            }}
+            QPushButton {{
+                background: rgba(255,255,255,15);
+                color: {text};
+                border: 1px solid {border};
+                border-radius: 8px;
+                padding: 6px 16px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background: {hover};
+            }}
+            QPushButton#primaryButton {{
+                background: {theme["colors"].get("accent", "#4fc3f7")};
+                color: #000;
+                border: none;
+                font-weight: bold;
+            }}
+            QPushButton#primaryButton:hover {{
+                background: {theme["colors"].get("accent_hover", "#81d4fa")};
             }}
         """)

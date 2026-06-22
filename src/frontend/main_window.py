@@ -1,5 +1,6 @@
 import threading
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from PyQt6.QtCore import (QAbstractNativeEventFilter, QByteArray, QEvent,
                            QMimeData, QPoint, QPointF, QRect, QSize, Qt,
@@ -50,7 +51,7 @@ from src.frontend.theme import (apply_theme_to_app, generate_svg_icon,
                                 svg_to_pixmap)
 from src.frontend.themed_input_dialog import ThemedInputDialog
 from src.frontend.themed_message_dialog import ThemedMessageDialog
-from src.frontend.update_dialog import UpdateInfoDialog
+from src.frontend.update_dialog import UpdateInfoDialog, InstallReadyDialog, DownloadDialog
 from src.os_layer.desktop_pin import pin_to_desktop, unpin_from_desktop
 from src.os_layer.platform_utils import open_url
 from src.os_layer.system_tray import SystemTrayManager
@@ -907,7 +908,7 @@ class TutorialDialog(GlassPanelDialog):
         ],
         [
             ("Export", "Press Ctrl+E or use the Export tab in Settings to export tasks as .txt, .md, or .csv."),
-            ("Check for updates", "Settings → General or click 🔄 in the title bar to check for new versions."),
+            ("Check for updates", "Settings → General or click 🔄 in the title bar. Downloads run in the background — keep working while it downloads. Choose Install Now or Remind Me Later. Cached downloads skip re-downloading next time."),
             ("Tray icon", "Right-click the tray icon to show the window or quit. The ✖ close button minimizes to tray."),
             ("Resize", "Drag any edge or corner of the window."),
         ],
@@ -2440,7 +2441,17 @@ class MainWindow(QMainWindow):
             return
         known_id = self.app_state.get("lastSeenReleaseId", 0)
         if result.available or (result.release_id and result.release_id != known_id):
-            self._show_update_dialog(result)
+            cached_version = self.app_state.get("cachedDownloadVersion", "")
+            cached_path = self.app_state.get("cachedDownloadPath", "")
+            if (cached_version == result.latest_version
+                    and cached_path
+                    and Path(cached_path).exists()):
+                self._show_install_prompt(cached_path, result.latest_version, from_cache=True)
+            else:
+                self.app_state["cachedDownloadVersion"] = ""
+                self.app_state["cachedDownloadPath"] = ""
+                self.state_manager.save()
+                self._show_update_dialog(result)
         else:
             ThemedMessageDialog.information(self, "Update Check", "You\u2019re up to date!")
 
@@ -2452,17 +2463,46 @@ class MainWindow(QMainWindow):
         dialog = UpdateInfoDialog(result.latest_version, friendly, result.download_url, self)
         avoid = self._window_rects_to_avoid()
         self._place_dialog_avoiding_rects(dialog, avoid)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self._apply_update(result.download_url, result.latest_version)
+        self._update_info_dialog = dialog
+        dialog.accepted.connect(lambda: self._apply_update(result.download_url, result.latest_version))
+        dialog.show()
 
     def _apply_update(self, download_url: str, version: str):
-        from src.frontend.update_dialog import DownloadDialog
+        cached_path = self.app_state.get("cachedDownloadPath", "")
+        cached_version = self.app_state.get("cachedDownloadVersion", "")
+        if (cached_version == version
+                and cached_path
+                and Path(cached_path).exists()):
+            self._show_install_prompt(cached_path, version, from_cache=True)
+            return
         dialog = DownloadDialog(version, download_url, self)
         avoid = self._window_rects_to_avoid()
         self._place_dialog_avoiding_rects(dialog, avoid)
         self._download_dialog = dialog
+        dialog.download_ready.connect(lambda path, v: self._show_install_prompt(path, v))
         dialog.start_download()
         dialog.show()
+
+    def _show_install_prompt(self, path: str, version: str, from_cache: bool = False):
+        dialog = InstallReadyDialog(version, from_cache=from_cache, parent=self)
+        avoid = self._window_rects_to_avoid()
+        self._place_dialog_avoiding_rects(dialog, avoid)
+        self._install_ready_dialog = dialog
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.app_state["cachedDownloadVersion"] = ""
+            self.app_state["cachedDownloadPath"] = ""
+            self.state_manager.save()
+            from src.backend.updater import _install_update
+            import sys
+            if getattr(sys, "frozen", False):
+                _install_update(Path(path), Path(sys.executable))
+                self._skip_close_confirm = True
+                self._force_quit = True
+                self.close()
+        else:
+            self.app_state["cachedDownloadVersion"] = version
+            self.app_state["cachedDownloadPath"] = path
+            self.state_manager.save()
 
     def _reapply_dwm_shadow_disable(self):
         try:

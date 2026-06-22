@@ -79,21 +79,66 @@ def _ps_fetch(url, headers, timeout):
     return result.stdout
 
 
-def _ps_download(url, dest_path, timeout=120):
-    """Fallback file download via PowerShell — Windows only."""
+def _ps_download(url, dest_path, timeout=120, progress_callback=None):
+    """Fallback file download via PowerShell — Windows only.
+
+    Streams the download and reports progress via stdout lines (bytes downloaded).
+    """
     if not is_windows():
         raise RuntimeError("PowerShell download fallback is Windows-only")
-    ps = (
-        "$r = Invoke-WebRequest -Uri '{}' -Headers @{{\"User-Agent\"=\"Nudge/1.0\"}} "
-        "-TimeoutSec {} -OutFile '{}' -UseBasicParsing"
-    ).format(url.replace("'", "''"), timeout, str(dest_path).replace("'", "''"))
+    ps_script = f"""
+$url = '{url.replace("'", "''")}'
+$dest = '{str(dest_path).replace("'", "''")}'
+try {{
+    $handler = [System.Net.Http.HttpClientHandler]::new()
+    $client = [System.Net.Http.HttpClient]::new($handler)
+    $client.Timeout = [TimeSpan]::FromSeconds({timeout})
+    $client.DefaultRequestHeaders.Add('User-Agent', 'Nudge/1.0')
+    $response = $client.GetAsync($url, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).Result
+    $response.EnsureSuccessStatusCode()
+    $total = $response.Content.Headers.ContentLength
+    if ($null -eq $total) {{ $total = 0 }}
+    $stream = $response.Content.ReadAsStreamAsync().Result
+    $fileStream = [System.IO.File]::Create($dest)
+    $buffer = New-Object byte[] 65536
+    $downloaded = 0
+    while ({{ $read = $stream.Read($buffer, 0, $buffer.Length); $read -gt 0 }}) {{
+        $fileStream.Write($buffer, 0, $read)
+        $downloaded += $read
+        Write-Output "$downloaded/$total"
+    }}
+    $fileStream.Close()
+    $stream.Close()
+    $client.Dispose()
+}} catch {{
+    Write-Error $_.Exception.Message
+    exit 1
+}}
+"""
     _ps_flags = subprocess.CREATE_NO_WINDOW
-    result = subprocess.run(
-        ["powershell", "-NoProfile", "-Command", ps],
-        capture_output=True, timeout=timeout + 30, creationflags=_ps_flags,
+    proc = subprocess.Popen(
+        ["powershell", "-NoProfile", "-Command", ps_script],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        creationflags=_ps_flags,
     )
-    if result.returncode != 0:
-        err = result.stderr.decode("utf-8", errors="replace").strip()
+    try:
+        for raw_line in iter(proc.stdout.readline, b""):
+            line = raw_line.decode("utf-8", errors="replace").strip()
+            if "/" in line and progress_callback:
+                try:
+                    parts = line.split("/", 1)
+                    dl = int(parts[0])
+                    total = int(parts[1]) if parts[1] else 0
+                    progress_callback(dl, total)
+                except (ValueError, IndexError):
+                    pass
+        proc.wait(timeout=timeout + 30)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        raise RuntimeError("PowerShell download timed out")
+    if proc.returncode != 0:
+        err = proc.stderr.read().decode("utf-8", errors="replace").strip()
         raise RuntimeError(err or "PowerShell download failed")
     if not dest_path.exists():
         raise RuntimeError("PowerShell download created no output file")
@@ -284,6 +329,18 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
         "  \u2022 Liquid glass transparency now applies on first launch\n"
         "  \u2022 Window corners no longer show black box edges on startup"
     ),
+    "1.12.0": (
+        "\u2728 Update Improvements\n"
+        "  \u2022 Download now runs in the background \u2014 you can keep working while it downloads\n"
+        "  \u2022 After download, choose \u201cInstall Now\u201d or \u201cRemind Me Later\u201d\n"
+        "  \u2022 Cached downloads: if you delay, the next check skips re-downloading\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Progress bar no longer stays stuck at 0%\n"
+        "  \u2022 Fixed file lock errors when retrying a failed download\n"
+        "  \u2022 PowerShell download now shows progress instead of blocking\n"
+        "  \u2022 Progress bar no longer cycles back to 0% after 100MB"
+    ),
 }
 
 
@@ -359,6 +416,12 @@ def download_update(
     then falls back to PowerShell Invoke-WebRequest on Windows.
     """
     dest_dir.mkdir(parents=True, exist_ok=True)
+    # Clean up any stale temp files from previous failed downloads
+    for stale in dest_dir.glob("Nudge_*"):
+        try:
+            stale.unlink(missing_ok=True)
+        except OSError:
+            pass
     ext = _PLATFORM_EXT
     dest_path = dest_dir / f"Nudge_{latest_version}{ext}"
     last_err = ""
@@ -399,15 +462,22 @@ def download_update(
 
     # --- fallback: PowerShell (works when _ssl DLL is broken) ---
     if is_windows():
-        try:
-            logging.info("Trying PowerShell fallback download")
-            _ps_download(download_url, dest_path, timeout=120)
-            return (dest_path, "")
-        except Exception as exc:
-            last_err = f"PowerShell fallback: {type(exc).__name__}: {exc}"
-            logging.error("PowerShell download failed: %s", last_err)
-            if dest_path.exists():
-                dest_path.unlink()
+        for attempt in range(2):
+            try:
+                logging.info("Trying PowerShell fallback download (attempt %d)", attempt + 1)
+                _ps_download(download_url, dest_path, timeout=120, progress_callback=progress_callback)
+                return (dest_path, "")
+            except Exception as exc:
+                last_err = f"PowerShell fallback: {type(exc).__name__}: {exc}"
+                logging.error("PowerShell download failed: %s", last_err)
+                if dest_path.exists():
+                    try:
+                        dest_path.unlink()
+                    except OSError:
+                        pass
+                if attempt == 0:
+                    import time
+                    time.sleep(2)
 
     return (None, last_err or "Unknown download error")
 
