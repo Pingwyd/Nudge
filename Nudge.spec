@@ -107,7 +107,6 @@ qt_excludes = [
     "PyQt6.QtXml",
     "PyQt6.QtLocation",
     "PyQt6.QtNetwork",
-    "PyQt6.QtSvg",
     "PyQt6.QtWebEngine",
     "PyQt6.QtWebEngineCore",
     "PyQt6.QtWebEngineWidgets",
