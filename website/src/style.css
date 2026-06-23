@@ -36,6 +36,7 @@ body {
   color: var(--text);
   line-height: 1.6;
   overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* ── Background Canvas ─────────────────────────────────────────── */
@@ -898,12 +899,14 @@ section h2 {
 }
 
 /* ── Responsive ────────────────────────────────────────────────── */
+
+/* Tablet & below */
 @media (max-width: 960px) {
   .hero {
     flex-direction: column;
     text-align: center;
     padding-top: 100px;
-    gap: 48px;
+    gap: 40px;
   }
 
   .hero-content {
@@ -914,15 +917,26 @@ section h2 {
     justify-content: center;
   }
 
-  .features-grid,
-  .themes-row,
+  .features-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .themes-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .themes-row .theme-card:last-child {
+    grid-column: 1 / -1;
+    max-width: 400px;
+    justify-self: center;
+  }
+
   .steps {
-    grid-template-columns: 1fr;
-    max-width: 480px;
-    margin: 0 auto;
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
+/* Mobile */
 @media (max-width: 640px) {
   .nav-links { display: none; }
   .nav-toggle { display: flex; }
@@ -936,18 +950,203 @@ section h2 {
     right: 0;
     background: rgba(10, 10, 10, 0.95);
     backdrop-filter: blur(20px);
-    padding: 24px;
-    gap: 20px;
+    -webkit-backdrop-filter: blur(20px);
+    padding: 20px 24px;
+    gap: 0;
     border-bottom: 1px solid var(--glass-border);
   }
 
-  .hero h1 { font-size: 2.4rem; }
+  .nav-links.open a {
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 1rem;
+  }
 
-  .app-mockup { max-width: 320px; }
+  .nav-links.open a:last-child {
+    border-bottom: none;
+    margin-top: 4px;
+  }
+
+  .nav-links.open a::after {
+    display: none;
+  }
+
+  /* Hero */
+  .hero {
+    min-height: auto;
+    padding: 100px 16px 60px;
+    gap: 36px;
+  }
+
+  .hero h1 {
+    font-size: 2.2rem;
+  }
+
+  .hero-desc {
+    font-size: 1rem;
+  }
+
+  .hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hero-actions .btn {
+    justify-content: center;
+  }
+
+  .hero-visual {
+    max-width: 100%;
+  }
+
+  .app-mockup {
+    max-width: 100%;
+    border-radius: var(--radius-md);
+  }
+
+  /* Sections */
+  section {
+    padding: 72px 0;
+  }
+
+  .section-inner {
+    padding: 0 16px;
+  }
+
+  section h2 {
+    font-size: 1.8rem;
+  }
+
+  .section-desc {
+    font-size: 0.95rem;
+  }
+
+  /* Features */
+  .features-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .feature-card {
+    padding: 24px 20px;
+  }
+
+  .feature-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .feature-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* Themes */
+  .themes-row {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .themes-row .theme-card:last-child {
+    max-width: 100%;
+  }
+
+  .theme-preview {
+    height: 150px;
+    padding: 16px;
+  }
+
+  /* Steps */
+  .steps {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .step {
+    padding: 28px 20px;
+  }
+
+  .step-num {
+    font-size: 2.2rem;
+  }
+
+  /* Download */
+  .download-card {
+    padding: 40px 20px;
+  }
+
+  .download-buttons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .download-buttons .btn {
+    justify-content: center;
+  }
+
+  .download-meta {
+    flex-wrap: wrap;
+  }
+
+  /* Footer */
+  .footer {
+    padding: 32px 16px;
+  }
 
   .footer-inner {
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     text-align: center;
+  }
+
+  /* Download modal */
+  .download-modal {
+    padding: 32px 20px 20px;
+  }
+
+  .modal-icon {
+    width: 52px;
+    height: 52px;
+  }
+
+  .modal-icon svg {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+/* Small phones */
+@media (max-width: 380px) {
+  .hero h1 {
+    font-size: 1.85rem;
+  }
+
+  .hero-badge {
+    font-size: 0.7rem;
+    padding: 5px 12px;
+  }
+
+  .nav-logo {
+    font-size: 1rem;
+  }
+
+  .logo-icon {
+    width: 28px;
+    height: 28px;
+    font-size: 0.8rem;
+  }
+
+  section h2 {
+    font-size: 1.55rem;
+  }
+
+  .btn {
+    padding: 10px 18px;
+    font-size: 0.9rem;
+  }
+
+  .btn-lg {
+    padding: 12px 24px;
+    font-size: 0.95rem;
   }
 }
