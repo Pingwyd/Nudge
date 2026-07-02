@@ -1,18 +1,17 @@
 """Persist task groups to groups.json (Stage 6)."""
 
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
 
+from src.backend.logging_config import setup_logging
 from src.backend.task_groups import default_groups_document, ensure_general_group
 from src.backend.paths import get_data_file, migrate_legacy_data
 
-
-def get_base_dir() -> Path:
-    """Backwards-compatible alias — prefer :func:`src.backend.paths.get_data_dir`."""
-    from src.backend.paths import get_data_dir
-    return get_data_dir()
+setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class GroupStore:
@@ -20,6 +19,7 @@ class GroupStore:
         migrate_legacy_data()
         self.filepath = get_data_file(filename)
         self.data = default_groups_document()
+        logger.info("GroupStore initialized: %d groups", len(self.data.get("groups", [])))
 
     def load(self) -> dict:
         if not self.filepath.exists():
@@ -49,6 +49,7 @@ class GroupStore:
             with os.fdopen(temp_fd, "w", encoding="utf-8") as handle:
                 json.dump(self.data, handle, indent=4)
             os.replace(temp_path, self.filepath)
-        except Exception:
+        except Exception as e:
             os.remove(temp_path)
+            logger.warning("Group save failed: %s", e)
             raise

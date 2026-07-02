@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -7,6 +8,7 @@ if sys.platform == "win32":
     import winreg
 from typing import Tuple
 
+from src.backend.logging_config import setup_logging
 from src.backend.window_geometry import (
     DEFAULT_WINDOW_HEIGHT,
     DEFAULT_WINDOW_WIDTH,
@@ -15,11 +17,8 @@ from src.backend.window_geometry import (
 )
 from src.backend.paths import get_data_file, migrate_legacy_data
 
-
-def get_base_dir() -> Path:
-    """Backwards-compatible alias — prefer :func:`src.backend.paths.get_data_dir`."""
-    from src.backend.paths import get_data_dir
-    return get_data_dir()
+setup_logging()
+logger = logging.getLogger(__name__)
 
 
 class StateManager:
@@ -27,6 +26,7 @@ class StateManager:
         # Persist app state under the per-user data directory.
         migrate_legacy_data()
         self.filepath = get_data_file(filename)
+        logger.info("StateManager initialized: %s", self.filepath)
         # Default state
         self.state = {
             "windowPos": {"x": 100, "y": 100},
@@ -43,11 +43,15 @@ class StateManager:
             "historyShortcut": "Ctrl+H",
             "settingsShortcut": "Ctrl+,",
             "pinShortcut": "Ctrl+P",
+            "alwaysOnTopShortcut": "Alt+T",
             "toggleTrayShortcut": "Ctrl+M",
+            "exportShortcut": "Ctrl+E",
+            "remindersShortcut": "Alt+R",
             "groupsEnabled": False,
             "lastExportDir": "",
             "checkForUpdates": True,
             "showBootNotification": True,
+            "playCompletionSound": True,
             "updateCheckUrl": "https://api.github.com/repos/Pingwyd/Nudge/releases/latest",
             "lastSeenVersion": "",
             "lastChangelog": "",
@@ -148,12 +152,14 @@ class StateManager:
                     self.state.pop("settingsShortcuts", None)
             except (json.JSONDecodeError, OSError):
                 pass
+        logger.debug("State loaded: %d keys", len(self.state))
         return self.state
 
     def save(self):
         try:
             with open(self.filepath, 'w', encoding='utf-8') as f:
                 json.dump(self.state, f, indent=4)
+            logger.info("State saved")
         except OSError:
             pass
 
@@ -204,7 +210,7 @@ class StateManager:
                     pass
             winreg.CloseKey(key)
         except Exception as e:
-            print(f"Registry operation failed: {e}")
+            logger.error("Registry operation failed: %s", e)
 
     def _set_run_on_startup_macos(self, enable: bool):
         plist_dir = Path.home() / "Library" / "LaunchAgents"

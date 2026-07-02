@@ -29,6 +29,20 @@ from src.frontend.theme import (
     normalize_theme_id,
     refresh_glass_shells,
 )
+from src.constants import (
+    MESSAGE_DIALOG_DEFAULT,
+    MESSAGE_DIALOG_MIN_WIDTH,
+    MARGIN_WIDE,
+    SPACING_MD,
+    BTN_HEIGHT_SM,
+    BTN_MIN_WIDTH_SM,
+    MESSAGE_MIN_WIDTH_FLOOR,
+    MESSAGE_CONTENT_PAD_H,
+    MESSAGE_SIZING_HEIGHT,
+    MESSAGE_BTN_GAP,
+    MESSAGE_LAYOUT_SPACING,
+    MESSAGE_DIALOG_BOTTOM_PAD,
+)
 
 
 class ThemedMessageDialog(GlassPanelDialog):
@@ -51,14 +65,14 @@ class ThemedMessageDialog(GlassPanelDialog):
         self.setWindowTitle(title)
         self.setWindowIcon(get_app_icon())
 
-        initial_w, initial_h = 350, 150
+        initial_w, initial_h = MESSAGE_DIALOG_DEFAULT
         self.resize(initial_w, initial_h)
 
-        self.bg_frame.setGeometry(0, 0, 350, 150)
+        self.bg_frame.setGeometry(0, 0, *MESSAGE_DIALOG_DEFAULT)
 
         layout = QVBoxLayout(self.bg_frame)
-        layout.setContentsMargins(20, 18, 20, 18)
-        layout.setSpacing(12)
+        layout.setContentsMargins(*MARGIN_WIDE)
+        layout.setSpacing(MESSAGE_LAYOUT_SPACING)
 
         self._title_label = QLabel(title)
         self._title_label.setStyleSheet("font-weight: bold;")
@@ -70,14 +84,14 @@ class ThemedMessageDialog(GlassPanelDialog):
         layout.addWidget(self._msg_label, 1)
 
         button_row = QHBoxLayout()
-        button_row.setSpacing(8)
+        button_row.setSpacing(SPACING_MD)
         button_row.addStretch(1)
         self._buttons = []
         for i, label in enumerate(buttons):
             btn = QPushButton(label)
             btn.setObjectName("ghostButton")
-            btn.setFixedHeight(28)
-            btn.setMinimumWidth(70)
+            btn.setFixedHeight(BTN_HEIGHT_SM)
+            btn.setMinimumWidth(BTN_MIN_WIDTH_SM)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(lambda checked, idx=i: self._on_button_clicked(idx))
             self._buttons.append(btn)
@@ -88,7 +102,7 @@ class ThemedMessageDialog(GlassPanelDialog):
             self._buttons[default_index].setDefault(True)
             self._buttons[default_index].setFocus()
 
-        self.setMinimumWidth(360)
+        self.setMinimumWidth(MESSAGE_DIALOG_MIN_WIDTH)
         self._size_to_content()
         self._update_overlap_opacity()
 
@@ -101,8 +115,8 @@ class ThemedMessageDialog(GlassPanelDialog):
             fm = QFontMetrics(label.font())
             for line in label.text().split("\n"):
                 longest = max(longest, fm.horizontalAdvance(line))
-        available_w = max(320, longest + m.left() + m.right() + 40)
-        self.resize(available_w, 160)
+        available_w = max(MESSAGE_MIN_WIDTH_FLOOR, longest + m.left() + m.right() + MESSAGE_CONTENT_PAD_H)
+        self.resize(available_w, MESSAGE_SIZING_HEIGHT)
 
         text_w = available_w - m.left() - m.right()
 
@@ -111,9 +125,9 @@ class ThemedMessageDialog(GlassPanelDialog):
         fm = QFontMetrics(self._msg_label.font())
         bounds = fm.boundingRect(0, 0, text_w, 10000, int(Qt.TextFlag.TextWordWrap), self._msg_label.text())
 
-        btn_h = 32
+        btn_h = BTN_HEIGHT_SM
 
-        total_h = m.top() + title_h + sp + bounds.height() + 8 + sp + btn_h + m.bottom()
+        total_h = m.top() + title_h + sp + bounds.height() + MESSAGE_BTN_GAP + sp + btn_h + m.bottom() + MESSAGE_DIALOG_BOTTOM_PAD
         self.resize(available_w, total_h)
 
     def focusOutEvent(self, event):

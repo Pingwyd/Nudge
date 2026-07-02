@@ -10,7 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QObject, Qt, QEvent
 from PyQt6.QtWidgets import QFrame, QWidget
 
 # --- Dark theme tokens (Liquid Glass) -------------------------------------------------
@@ -57,6 +57,10 @@ DARK_THEME: Dict[str, Any] = {
         "toggle_off": "#666666",
         "input_focus_glow": "0 0 8px rgba(79, 195, 247, 0.2)",
         "dialog_shadow": "0 8px 32px rgba(0, 0, 0, 0.4)",
+        "priority_header_bg": "rgba(79, 195, 247, 25)",
+        "priority_header_text": "#4fc3f7",
+        "priority_divider": "rgba(79, 195, 247, 60)",
+        "section_divider": "rgba(255, 255, 255, 80)",
     },
     "radii": {
         "window": 20,
@@ -119,6 +123,10 @@ LIGHT_THEME: Dict[str, Any] = {
         "toggle_off": "#c7c7cc",
         "input_focus_glow": "0 0 6px rgba(0, 122, 255, 0.15)",
         "dialog_shadow": "0 4px 16px rgba(0, 0, 0, 0.15)",
+        "priority_header_bg": "rgba(0, 122, 255, 20)",
+        "priority_header_text": "#007AFF",
+        "priority_divider": "rgba(0, 122, 255, 50)",
+        "section_divider": "rgba(0, 0, 0, 80)",
     },
     "radii": deepcopy(DARK_THEME["radii"]),
     "fonts": deepcopy(DARK_THEME["fonts"]),
@@ -168,6 +176,10 @@ OLED_THEME: Dict[str, Any] = {
         "toggle_off": "#666666",
         "input_focus_glow": "0 0 8px rgba(79, 195, 247, 0.25)",
         "dialog_shadow": "0 8px 32px rgba(0, 0, 0, 0.6)",
+        "priority_header_bg": "rgba(79, 195, 247, 20)",
+        "priority_header_text": "#4fc3f7",
+        "priority_divider": "rgba(79, 195, 247, 50)",
+        "section_divider": "rgba(255, 255, 255, 70)",
     },
     "radii": deepcopy(DARK_THEME["radii"]),
     "fonts": deepcopy(DARK_THEME["fonts"]),
@@ -244,7 +256,7 @@ def generate_svg_icon(icon_type: str, color: str, size: int = 24) -> str:
 
 def svg_to_pixmap(svg_str: str, size: int = 24) -> "QPixmap":
     """Convert SVG string to QPixmap."""
-    from PyQt6.QtGui import QPixmap, QPainter
+    from PyQt6.QtGui import QPainter, QPixmap
     from PyQt6.QtSvg import QSvgRenderer
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
@@ -321,6 +333,7 @@ def line_edit_stylesheet(theme: Dict[str, Any]) -> str:
             padding: 8px;
             font-size: 14px;
             min-height: 32px;
+            selection-background-color: {_c(theme, "accent")};
         }}
         QLineEdit:focus {{
             border: 1px solid {_c(theme, "border_highlight")};
@@ -339,6 +352,52 @@ def _combo_dropdown_arrow_svg(theme: Dict[str, Any]) -> str:
     )
     encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
     return f"image: url(data:image/svg+xml;base64,{encoded});"
+
+
+def _combo_popup_bg(theme: Dict[str, Any]) -> str:
+    """Solid popup surface — matches dialog shells and inputs, not context menus."""
+    return _c(theme, "glass_overlap_solid")
+
+
+def combo_popup_view_stylesheet(theme: Dict[str, Any]) -> str:
+    """QSS for QComboBox list popups (top-level windows that ignore app QSS)."""
+    bg = _combo_popup_bg(theme)
+    border = _c(theme, "border")
+    surface_r = _r(theme, "input")
+    item_r = _r(theme, "input")
+    return f"""
+        QFrame, QWidget, QListView {{
+            background-color: {bg};
+            color: {_c(theme, "text")};
+            border: 1px solid {border};
+            border-radius: {surface_r}px;
+        }}
+        QAbstractItemView {{
+            background-color: {bg};
+            color: {_c(theme, "text")};
+            border: none;
+            outline: none;
+            padding: 4px;
+            font-size: 14px;
+            selection-background-color: {_c(theme, "hover_strong")};
+            selection-color: {_c(theme, "text")};
+        }}
+        QAbstractItemView::item {{
+            background-color: transparent;
+            color: {_c(theme, "text")};
+            border: none;
+            padding: 6px 10px;
+            border-radius: {item_r}px;
+            min-height: 20px;
+        }}
+        QAbstractItemView::item:hover {{
+            background-color: {_c(theme, "hover")};
+        }}
+        QAbstractItemView::item:selected {{
+            background-color: {_c(theme, "hover_strong")};
+            color: {_c(theme, "text")};
+        }}
+    """
 
 
 def combo_box_stylesheet(theme: Dict[str, Any]) -> str:
@@ -366,10 +425,9 @@ def combo_box_stylesheet(theme: Dict[str, Any]) -> str:
             border-left: 1px solid {_c(theme, "border")};
         }}
         QComboBox QAbstractItemView {{
-            background-color: {_c(theme, "menu_bg")};
+            background-color: {_combo_popup_bg(theme)};
             color: {_c(theme, "text")};
-            border: 1px solid {_c(theme, "menu_border")};
-            border-radius: {_r(theme, "input")}px;
+            border: none;
             selection-background-color: {_c(theme, "hover")};
             selection-color: {_c(theme, "text")};
             outline: none;
@@ -498,15 +556,15 @@ def scroll_bar_stylesheet(theme: Dict[str, Any]) -> str:
     hover_strong = _c(theme, "hover_strong")
     return f"""
         QScrollBar:vertical {{
-            background: {track};
-            width: 10px;
+            background: transparent;
+            width: 8px;
             margin: 4px 2px 4px 0;
-            border-radius: 4px;
+            border: none;
         }}
         QScrollBar::handle:vertical {{
             background: {handle};
             border-radius: 4px;
-            min-height: 24px;
+            min-height: 30px;
         }}
         QScrollBar::handle:vertical:hover {{
             background: {hover};
@@ -516,17 +574,23 @@ def scroll_bar_stylesheet(theme: Dict[str, Any]) -> str:
         }}
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
             height: 0px;
+            background: none;
+            border: none;
+        }}
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+            background: none;
+            border: none;
         }}
         QScrollBar:horizontal {{
-            background: {track};
-            height: 10px;
+            background: transparent;
+            height: 8px;
             margin: 0 4px 2px 4px;
-            border-radius: 4px;
+            border: none;
         }}
         QScrollBar::handle:horizontal {{
             background: {handle};
             border-radius: 4px;
-            min-width: 24px;
+            min-width: 30px;
         }}
         QScrollBar::handle:horizontal:hover {{
             background: {hover};
@@ -536,6 +600,12 @@ def scroll_bar_stylesheet(theme: Dict[str, Any]) -> str:
         }}
         QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
             width: 0px;
+            background: none;
+            border: none;
+        }}
+        QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+            background: none;
+            border: none;
         }}
     """
 
@@ -578,12 +648,14 @@ def dialog_stylesheet(theme: Dict[str, Any]) -> str:
             color: {_c(theme, "text")};
             border: 1px solid {_c(theme, "border")};
             border-radius: {_r(theme, "button")}px;
-            padding: 6px 14px;
-            font-size: 14px;
-            min-height: 28px;
+            padding: 8px 20px;
+            font-size: 13px;
+            font-weight: 500;
+            min-height: 32px;
         }}
         QPushButton:hover {{
             background: {_c(theme, "hover_strong")};
+            border: 1px solid {_c(theme, "border_highlight")};
         }}
     """
 
@@ -731,16 +803,17 @@ def ghost_button_stylesheet(theme: Dict[str, Any]) -> str:
             color: {_c(theme, "text")};
             border: 1px solid {_c(theme, "border")};
             border-radius: {_r(theme, "button")}px;
-            font-size: 14px;
-            padding: 8px 4px;
+            font-size: 13px;
+            font-weight: 500;
+            padding: 8px 20px;
             min-height: 32px;
         }}
         QPushButton#ghostButton:hover {{
-            background: {_c(theme, "chrome_hover")};
+            background: {_c(theme, "hover")};
             border: 1px solid {_c(theme, "border_highlight")};
         }}
         QPushButton#ghostButton:pressed {{
-            background: {_c(theme, "hover")};
+            background: {_c(theme, "hover_strong")};
         }}
     """
 
@@ -752,10 +825,10 @@ def accent_icon_button_stylesheet(theme: Dict[str, Any]) -> str:
             color: {_c(theme, "text")};
             border: 1px solid {_c(theme, "border")};
             border-radius: {_r(theme, "button")}px;
-            font-size: 20px;
+            font-size: 18px;
             font-weight: bold;
             padding: 0px;
-            min-height: 22px;
+            min-height: 24px;
         }}
         QPushButton#accentIconButton:hover {{
             background: {_c(theme, "hover_strong")};
@@ -771,8 +844,9 @@ def primary_button_stylesheet(theme: Dict[str, Any]) -> str:
             color: {_c(theme, "text")};
             border: 1px solid {_c(theme, "border")};
             border-radius: {_r(theme, "button")}px;
-            padding: 8px 12px;
-            font-size: 14px;
+            padding: 8px 20px;
+            font-size: 13px;
+            font-weight: 500;
             min-height: 32px;
         }}
         QPushButton#primaryButton:hover {{
@@ -783,7 +857,7 @@ def primary_button_stylesheet(theme: Dict[str, Any]) -> str:
             background: {_c(theme, "hover")};
         }}
         QPushButton#primaryButton:focus {{
-            border: 2px solid {_c(theme, "border_highlight")};
+            border: 1px solid {_c(theme, "accent")};
         }}
     """
 
@@ -795,9 +869,10 @@ def sidebar_button_stylesheet(theme: Dict[str, Any]) -> str:
             color: {_c(theme, "text")};
             border: 1px solid transparent;
             border-radius: {_r(theme, "button")}px;
-            padding: 6px 12px;
-            font-size: 14px;
-            min-height: 30px;
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            min-height: 32px;
             text-align: left;
         }}
         QPushButton#sidebarButton:hover {{
@@ -807,7 +882,7 @@ def sidebar_button_stylesheet(theme: Dict[str, Any]) -> str:
         QPushButton#sidebarButton:checked {{
             background: {_c(theme, "accent_button_bg")};
             border: 1px solid {_c(theme, "border_highlight")};
-            font-weight: bold;
+            font-weight: 600;
         }}
     """
 
@@ -816,14 +891,19 @@ def danger_button_stylesheet(theme: Dict[str, Any]) -> str:
     return f"""
         QPushButton#dangerButton {{
             background-color: {_c(theme, "danger_bg")};
-            color: {_c(theme, "text")};
-            border-radius: {_r(theme, "button")}px;
-            padding: 6px 10px;
+            color: {_c(theme, "danger_text")};
             border: 1px solid {_c(theme, "danger_border")};
-            font-size: 14px;
-            min-height: 28px;
+            border-radius: {_r(theme, "button")}px;
+            padding: 8px 20px;
+            font-size: 13px;
+            font-weight: 500;
+            min-height: 32px;
         }}
         QPushButton#dangerButton:hover {{
+            background-color: {_c(theme, "danger_hover")};
+            border: 1px solid {_c(theme, "danger_text")};
+        }}
+        QPushButton#dangerButton:pressed {{
             background-color: {_c(theme, "danger_hover")};
         }}
     """
@@ -901,6 +981,160 @@ def glass_overlap_stylesheet(theme: Dict[str, Any], radius: int = 20) -> str:
     """
 
 
+def footer_history_button_stylesheet(theme: dict) -> str:
+    """Stylesheet for the footer history button."""
+    c = theme["colors"]
+    return f"""
+        QPushButton {{
+            background: transparent;
+            color: {c.get('text', '#ffffff')};
+            border: 1px solid {c.get('border', 'rgba(255,255,255,60)')};
+            border-radius: 6px;
+            padding: 3px 8px;
+            font-size: 10px;
+            font-weight: 500;
+        }}
+        QPushButton:hover {{
+            background: {c.get('hover', 'rgba(255,255,255,15)')};
+            border: 1px solid {c.get('border_highlight', 'rgba(255,255,255,80)')};
+        }}
+    """
+
+
+def footer_bar_stylesheet(theme: dict) -> str:
+    """Stylesheet for the footer bar container."""
+    c = theme["colors"]
+    return f"""
+        QWidget {{
+            background: {c.get("input_bg", "rgba(0,0,0,40)")};
+            border: none;
+            border-radius: 0px;
+        }}
+    """
+
+
+def overflow_menu_stylesheet(theme: dict) -> str:
+    """Stylesheet for the overflow (···) dropdown menu."""
+    c = theme["colors"]
+    bg = c.get("menu_bg", "rgba(40, 40, 40, 220)")
+    fg = c.get("text", "#ffffff")
+    border = c.get("menu_border", "rgba(255,255,255,50)")
+    hover = c.get("hover", "rgba(255,255,255,30)")
+    return f"""
+        QMenu {{
+            background: {bg};
+            color: {fg};
+            border: 1px solid {border};
+            border-radius: 8px;
+            padding: 4px 0;
+        }}
+        QMenu::item {{
+            padding: 6px 24px;
+        }}
+        QMenu::item:selected {{
+            background: {hover};
+        }}
+    """
+
+
+def history_header_card_stylesheet(theme: dict) -> str:
+    """Stylesheet for the history dialog header card."""
+    c = theme["colors"]
+    return f"""
+        QWidget {{
+            background: {c.get('input_bg', 'rgba(0,0,0,40)')};
+            border-radius: 12px;
+            padding: 12px;
+        }}
+    """
+
+
+def history_title_stylesheet(theme: dict) -> str:
+    """Stylesheet for the history dialog title label."""
+    c = theme["colors"]
+    return f"font-weight: bold; font-size: 16px; color: {c.get('text', '#ffffff')}; background: transparent;"
+
+
+def history_count_badge_stylesheet(theme: dict) -> str:
+    """Stylesheet for the history count badge."""
+    c = theme["colors"]
+    return f"""
+        color: {c.get('text', '#ffffff')};
+        background: {c.get('hover', 'rgba(255,255,255,10)')};
+        border: 1px solid {c.get('border', 'rgba(255,255,255,60)')};
+        border-radius: 8px;
+        font-size: 10px;
+        font-weight: bold;
+    """
+
+
+def history_search_bar_stylesheet(theme: dict) -> str:
+    """Stylesheet for the history search bar."""
+    c = theme["colors"]
+    return f"""
+        QLineEdit {{
+            background: {c.get('input_bg', 'rgba(0,0,0,40)')};
+            color: {c.get('text', '#ffffff')};
+            border: 1px solid {c.get('border', 'rgba(255,255,255,60)')};
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 13px;
+        }}
+        QLineEdit:focus {{
+            border: 1px solid {c.get('border_highlight', 'rgba(255,255,255,90)')};
+        }}
+    """
+
+
+def history_footer_stylesheet(theme: dict) -> str:
+    """Stylesheet for the history dialog footer."""
+    c = theme["colors"]
+    return f"background: {c.get('input_bg', 'rgba(0,0,0,40)')}; border-radius: 12px;"
+
+
+def history_clear_all_button_stylesheet(theme: dict) -> str:
+    """Stylesheet for the Clear All button in history."""
+    c = theme["colors"]
+    return f"""
+        QPushButton {{
+            background: transparent;
+            color: {c.get('danger_text', '#ff5050')};
+            border: 1px solid {c.get('danger_border', 'rgba(255,50,50,80)')};
+            border-radius: 6px;
+            padding: 6px 16px;
+            font-size: 12px;
+            font-weight: 500;
+        }}
+        QPushButton:hover {{
+            background: {c.get('danger_hover', 'rgba(255,80,80,15)')};
+        }}
+    """
+
+
+def settings_scroll_area_stylesheet(theme: dict) -> str:
+    """Stylesheet for settings scroll areas."""
+    c = theme["colors"]
+    return f"""
+        QScrollArea {{
+            border: none;
+            background: transparent;
+        }}
+        QScrollBar:vertical {{
+            background: transparent;
+            width: 8px;
+            margin: 0;
+        }}
+        QScrollBar::handle:vertical {{
+            background: {c.get('border', 'rgba(255,255,255,60)')};
+            border-radius: 4px;
+            min-height: 30px;
+        }}
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+            height: 0px;
+        }}
+    """
+
+
 def build_application_stylesheet(theme: Dict[str, Any] | None = None) -> str:
     """Full app QSS generated from the theme dictionary."""
     theme = theme or DARK_THEME
@@ -946,7 +1180,146 @@ def apply_theme_to_app(
     else:
         resolved = deepcopy(theme or DARK_THEME)
     app.setStyleSheet(build_application_stylesheet(resolved))
+
+    # Set QPalette so Qt uses proper cursor/selection colors (QSS caret-color is not supported)
+    from PyQt6.QtGui import QColor, QPalette
+    palette = app.palette()
+    palette.setColor(QPalette.ColorRole.Text, QColor(_c(resolved, "text")))
+    palette.setColor(QPalette.ColorRole.Base, QColor(_c(resolved, "input_bg").replace("rgba", "rgb").replace(", 40)", ", 255)").replace(", 20)", ", 255)").replace(", 210)", ", 255)")))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor(_c(resolved, "accent")))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+    app.setPalette(palette)
+
+    # Fix combo box dropdown popups — they are top-level windows that don't inherit app QSS
+    _style_all_combo_views(resolved, app)
+
     return resolved
+
+
+# ── Combo popup styling (top-level windows that ignore app QSS) ──────────────
+
+def _combo_popup_palette(theme: Dict[str, Any]) -> "QPalette":
+    from PyQt6.QtGui import QColor, QPalette
+
+    pal = QPalette()
+    surface = QColor(_combo_popup_bg(theme))
+    text_c = QColor(_c(theme, "text"))
+    highlight = QColor(_c(theme, "hover_strong"))
+    pal.setColor(QPalette.ColorRole.Base, surface)
+    pal.setColor(QPalette.ColorRole.Window, surface)
+    pal.setColor(QPalette.ColorRole.Text, text_c)
+    pal.setColor(QPalette.ColorRole.Highlight, highlight)
+    pal.setColor(QPalette.ColorRole.HighlightedText, text_c)
+    return pal
+
+
+def _apply_combo_popup_surface(combo, theme: Dict[str, Any]) -> None:
+    """Apply themed background, border, and palette to an open combo popup."""
+    from PyQt6.QtCore import Qt
+
+    try:
+        view = combo.view()
+        if view is None:
+            return
+        popup_css = combo_popup_view_stylesheet(theme)
+        popup_pal = _combo_popup_palette(theme)
+        view.setStyleSheet(popup_css)
+        view.setPalette(popup_pal)
+        view.setAutoFillBackground(True)
+        vp = view.viewport()
+        if vp:
+            vp.setStyleSheet(f"background-color: {_combo_popup_bg(theme)}; border: none;")
+            vp.setPalette(popup_pal)
+            vp.setAutoFillBackground(True)
+        popup_win = view.window()
+        if popup_win is None:
+            return
+        flags = popup_win.windowFlags()
+        popup_win.setWindowFlags(
+            flags
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.NoDropShadowWindowHint
+        )
+        popup_win.setStyleSheet(popup_css)
+        popup_win.setPalette(popup_pal)
+        popup_win.setAutoFillBackground(True)
+        styler = getattr(combo, "_combo_popup_styler", None)
+        if styler is None:
+            styler = _ComboPopupStyler(theme, combo, popup_win)
+            popup_win.installEventFilter(styler)
+            combo._combo_popup_styler = styler
+        else:
+            styler.update_theme(theme)
+        popup_win.show()
+    except RuntimeError:
+        pass
+
+
+class _ComboPopupStyler(QObject):
+    """Restyle combo popups when the popup window is shown."""
+
+    def __init__(self, theme: Dict[str, Any], combo, parent=None):
+        super().__init__(parent)
+        self._theme = deepcopy(theme)
+        self._combo = combo
+
+    def update_theme(self, theme: Dict[str, Any]) -> None:
+        self._theme = deepcopy(theme)
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.Show:
+            _apply_combo_popup_surface(self._combo, self._theme)
+        return False
+
+
+def _style_all_combo_views(theme: Dict[str, Any], app=None) -> None:
+    """Style every QComboBox dropdown popup to match the current theme.
+
+    Qt combo popups are top-level windows that don't inherit the app stylesheet.
+    We monkey-patch showPopup() on each combo so palette + QSS are applied every
+    time the list opens, and strip native popup chrome on Windows.
+    """
+    from PyQt6.QtGui import QColor, QPalette
+    from PyQt6.QtWidgets import QApplication, QComboBox
+
+    if app is None:
+        app = QApplication.instance()
+    if app is None:
+        return
+
+    popup_css = combo_popup_view_stylesheet(theme)
+
+    def _make_show_popup(original_show_popup):
+        def _themed_show_popup(self_combo):
+            original_show_popup(self_combo)
+            styler = getattr(self_combo, "_combo_popup_styler", None)
+            active_theme = styler._theme if styler is not None else theme
+            _apply_combo_popup_surface(self_combo, active_theme)
+        return _themed_show_popup
+
+    for combo in app.findChildren(QComboBox):
+        view = combo.view()
+        if view is None:
+            continue
+        view.setStyleSheet(popup_css)
+        pal = _combo_popup_palette(theme)
+        view.setPalette(pal)
+        vp = view.viewport()
+        if vp:
+            vp.setPalette(pal)
+        combo_pal = combo.palette()
+        combo_pal.setColor(QPalette.ColorRole.Base, QColor(_c(theme, "input_bg")))
+        combo_pal.setColor(QPalette.ColorRole.Text, QColor(_c(theme, "text")))
+        combo.setPalette(combo_pal)
+        styler = getattr(combo, "_combo_popup_styler", None)
+        if styler is not None:
+            styler.update_theme(theme)
+        if not getattr(combo, "_themed_popup", False):
+            combo._themed_popup = True
+            combo._original_show_popup = combo.showPopup
+            combo.showPopup = _make_show_popup(
+                combo._original_show_popup,
+            ).__get__(combo, type(combo))
 
 
 def refresh_glass_shells(
@@ -981,4 +1354,9 @@ def refresh_glass_shells(
         style.unpolish(widget)
         style.polish(widget)
         widget.update()
+
+    # Re-apply the global combo popup filter with updated theme
+    from PyQt6.QtWidgets import QApplication
+    _style_all_combo_views(resolved, app=QApplication.instance())
+
     root.update()

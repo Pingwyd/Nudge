@@ -4,21 +4,46 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout
 from src.frontend.glass_panel_dialog import GlassPanelDialog
 from src import __app_name__, __version__
+from src.constants import (
+    WHATS_NEW_DIALOG_DEFAULT,
+    WHATS_NEW_DIALOG_MIN,
+    MARGIN_STANDARD,
+    SPACING_LG,
+    FONT_SIZE_BODY,
+    FONT_SIZE_TITLE_LG,
+    WHATS_NEW_LINE_HEIGHT,
+    WHATS_NEW_LIST_ITEM_MARGIN,
+    WHATS_NEW_LIST_PADDING,
+    WHATS_NEW_HEADING_MARGIN_TOP,
+    WHATS_NEW_HEADING_MARGIN_BOTTOM,
+)
 
 
 def _changelog_to_html(text: str) -> str:
     if not text:
         return "<p>No release notes available.</p>"
     lines = text.split("\n")
-    html_parts = ['<div style="font-size:13px; line-height:1.6;">']
+    html_parts = [f'<div style="font-size:{FONT_SIZE_BODY}px; line-height:{WHATS_NEW_LINE_HEIGHT};">']
+    in_list = False
     for line in lines:
         stripped = line.strip()
         if not stripped:
+            if in_list:
+                html_parts.append("</ul>")
+                in_list = False
             html_parts.append("<br>")
-        elif stripped.startswith("•") or stripped.startswith("-"):
-            html_parts.append(f'<li style="margin:2px 0;">{stripped[1:].strip()}</li>')
+        elif stripped.startswith("\u2022") or stripped.startswith("-"):
+            if not in_list:
+                html_parts.append(f'<ul style="margin:{WHATS_NEW_LIST_ITEM_MARGIN}px 0; padding-left:{WHATS_NEW_LIST_PADDING}px;">')
+                in_list = True
+            html_parts.append(f'<li style="margin:{WHATS_NEW_LIST_ITEM_MARGIN}px 0;">{stripped[1:].strip()}</li>')
         else:
-            html_parts.append(f'<p style="margin:8px 0 4px 0; font-weight:bold;">{stripped}</p>')
+            if in_list:
+                html_parts.append("</ul>")
+                in_list = False
+            html_parts.append(f'<p style="margin:{WHATS_NEW_HEADING_MARGIN_TOP}px 0 {WHATS_NEW_HEADING_MARGIN_BOTTOM}px 0; font-weight:bold;">{stripped}</p>')
+    if in_list:
+        html_parts.append("</ul>")
     html_parts.append("</div>")
     return "".join(html_parts)
 
@@ -31,17 +56,17 @@ class WhatsNewDialog(GlassPanelDialog):
 
     def _init_ui(self):
         self.setWindowTitle(f"What\u2019s New in {__app_name__}")
-        self.resize(400, 380)
-        self.setMinimumSize(320, 300)
+        self.resize(*WHATS_NEW_DIALOG_DEFAULT)
+        self.setMinimumSize(*WHATS_NEW_DIALOG_MIN)
 
         layout = QVBoxLayout(self.bg_frame)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(10)
+        layout.setContentsMargins(*MARGIN_STANDARD)
+        layout.setSpacing(SPACING_LG)
 
         title = QLabel(f"What\u2019s New in {__app_name__} v{__version__}")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         font = title.font()
-        font.setPointSize(16)
+        font.setPointSize(FONT_SIZE_TITLE_LG)
         font.setBold(True)
         title.setFont(font)
         layout.addWidget(title)

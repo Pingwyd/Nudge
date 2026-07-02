@@ -3,6 +3,14 @@ from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QLabel, QPushButton, QVBoxLayout
 from src.frontend.glass_panel_dialog import GlassPanelDialog
 from src import __app_name__, __version__
+from src.constants import (
+    SUPPORT_DIALOG_DEFAULT,
+    SUPPORT_DIALOG_MIN,
+    MARGIN_STANDARD,
+    SUPPORT_LAYOUT_SPACING,
+    SUPPORT_TITLE_FONT_SIZE,
+    SUPPORT_DONATE_BTN_MIN_HEIGHT,
+)
 
 
 class SupportDialog(GlassPanelDialog):
@@ -12,16 +20,16 @@ class SupportDialog(GlassPanelDialog):
 
     def _init_ui(self):
         self.setWindowTitle(f"Support {__app_name__}")
-        self.resize(340, 260)
-        self.setMinimumSize(280, 220)
+        self.resize(*SUPPORT_DIALOG_DEFAULT)
+        self.setMinimumSize(*SUPPORT_DIALOG_MIN)
 
         layout = QVBoxLayout(self.bg_frame)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(12)
+        layout.setContentsMargins(*MARGIN_STANDARD)
+        layout.setSpacing(SUPPORT_LAYOUT_SPACING)
 
         title = QLabel(f"\u2764\ufe0f Support {__app_name__}")
         font = title.font()
-        font.setPointSize(18)
+        font.setPointSize(SUPPORT_TITLE_FONT_SIZE)
         font.setBold(True)
         title.setFont(font)
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -39,7 +47,7 @@ class SupportDialog(GlassPanelDialog):
 
         donate_btn = QPushButton("\u2615 Buy Me a Coffee")
         donate_btn.setObjectName("primaryButton")
-        donate_btn.setMinimumHeight(40)
+        donate_btn.setMinimumHeight(SUPPORT_DONATE_BTN_MIN_HEIGHT)
         donate_btn.clicked.connect(self._open_donate_link)
         layout.addWidget(donate_btn)
 

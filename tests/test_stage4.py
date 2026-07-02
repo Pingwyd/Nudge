@@ -34,7 +34,7 @@ class TestSettingsPanel:
 
     def test_double_click_opens_edit_dialog(self, qapp_instance):
         """4.2: Double-click on reminder should open edit dialog, not clear."""
-        from src.frontend.main_window import SettingsDialog
+        from src.frontend.settings_dialog import SettingsDialog
         
         # Check that the method exists
         assert hasattr(SettingsDialog, '_edit_task_reminder_from_list')
@@ -44,7 +44,7 @@ class TestSettingsPanel:
 
     def test_help_tab_exists(self, qapp_instance):
         """4.3: Help tab should exist with Tutorial, Support, and Reminders buttons."""
-        from src.frontend.main_window import SettingsDialog
+        from src.frontend.settings_dialog import SettingsDialog
         
         # Check that the method exists
         assert hasattr(SettingsDialog, 'init_ui')
@@ -57,7 +57,7 @@ class TestSettingsPanel:
 
     def test_reset_to_defaults_above_save_close(self, qapp_instance):
         """4.4: Reset to Defaults should be above Save/Close buttons."""
-        from src.frontend.main_window import SettingsDialog
+        from src.frontend.settings_dialog import SettingsDialog
         
         # Check that the button is created
         import inspect
@@ -78,7 +78,7 @@ class TestSettingsPanel:
         assert "What" in source and "New" in source
         
         # Check that Settings dialog doesn't have What's New button
-        from src.frontend.main_window import SettingsDialog
+        from src.frontend.settings_dialog import SettingsDialog
         settings_source = inspect.getsource(SettingsDialog.init_ui)
         assert 'whatsnew_btn' not in settings_source
 
@@ -96,6 +96,6 @@ class TestSettingsPanel:
         assert 'run_export_with_dialog' in source
         
         # Check that SettingsDialog uses it
-        from src.frontend.main_window import SettingsDialog
+        from src.frontend.settings_dialog import SettingsDialog
         settings_source = inspect.getsource(SettingsDialog._run_settings_export)
         assert 'run_export_with_dialog' in settings_source

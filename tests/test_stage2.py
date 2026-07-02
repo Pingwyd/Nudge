@@ -9,7 +9,7 @@ from PyQt6.QtGui import QMouseEvent, QFocusEvent
 # ── 2.1 Double-click to complete ──────────────────────────────────────
 
 def _make_task_row(qapp_instance):
-    from src.frontend.main_window import TaskRowWidget
+    from src.frontend.task_row import TaskRowWidget
     toggled = MagicMock()
     row = TaskRowWidget("Test task", on_toggled=toggled)
     row.resize(300, 40)
@@ -36,7 +36,7 @@ def test_single_click_does_not_complete(qapp_instance):
 
 
 def test_double_click_completes(qapp_instance):
-    """Double click on a task row should trigger on_toggled(True)."""
+    """Double click on a task row should trigger begin_edit (not toggle)."""
     row, toggled = _make_task_row(qapp_instance)
 
     pos = QPointF(100, 20)
@@ -45,13 +45,15 @@ def test_double_click_completes(qapp_instance):
                       Qt.KeyboardModifier.NoModifier)
     row.mouseDoubleClickEvent(dbl)
 
-    toggled.assert_called_once_with(True)
+    # Double-click now enters edit mode, not toggle
+    assert row._editing is True
+    toggled.assert_not_called()
     row.close()
 
 
 def test_undo_toast_exists(qapp_instance):
     """UndoToast class should be importable and instantiable."""
-    from src.frontend.main_window import UndoToast
+    from src.frontend.undo_toast import UndoToast
     from PyQt6.QtWidgets import QWidget
     parent = QWidget()
     parent.resize(300, 300)

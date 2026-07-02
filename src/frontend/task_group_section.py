@@ -18,6 +18,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.frontend.widget_context import WidgetContext
+
 
 class TaskGroupSection(QWidget):
     """Collapsible group header plus a vertical list of task row widgets."""
@@ -40,7 +42,7 @@ class TaskGroupSection(QWidget):
         self._on_header_clicked = on_header_clicked
         self._expanded = bool(group.get("expanded", True))
         self.task_rows: List[QWidget] = []
-        self._main_window = None
+        self._ctx: WidgetContext | None = None
         self._drag_hover_index = -1
         self._drag_start_pos = None
         self._is_dragging = False
@@ -76,7 +78,7 @@ class TaskGroupSection(QWidget):
         self._drop_indicator.hide()
 
         font = self.header_btn.font()
-        font.setPointSize(text_size)
+        font.setPixelSize(text_size + 1)
         self.header_btn.setFont(font)
 
     def _toggle(self):
@@ -121,10 +123,10 @@ class TaskGroupSection(QWidget):
         return super().eventFilter(obj, event)
 
     def _start_group_drag(self):
-        mw = self._main_window
-        if mw is None:
+        ctx = self._ctx
+        if ctx is None:
             return
-        groups_enabled = mw.app_state.get("groupsEnabled", True)
+        groups_enabled = ctx.is_groups_enabled()
         if not groups_enabled:
             return
         drag = QDrag(self)
@@ -160,7 +162,7 @@ class TaskGroupSection(QWidget):
         if row_widget in self.task_rows:
             self.task_rows.remove(row_widget)
 
-    def refresh(self, tasks: list, text_size: int = 14, main_window=None) -> None:
+    def refresh(self, tasks: list, text_size: int = 14, ctx: WidgetContext | None = None) -> None:
         """Clear and repopulate this section's task rows from a task list.
 
         # FIX-A1: targeted section update — does not call render_tasks.
@@ -170,20 +172,20 @@ class TaskGroupSection(QWidget):
             row.setParent(None)
             row.deleteLater()
         self.task_rows.clear()
-        if main_window is not None:
-            from src.frontend.main_window import TaskRowWidget
+        if ctx is not None:
+            from src.frontend.task_row import TaskRowWidget
             for task in tasks:
                 row = TaskRowWidget(
                     task["text"],
                     checked=task.get("done", False),
                     text_size=text_size,
-                    on_toggled=lambda checked, t=task: main_window.toggle_task(t, checked),
-                    on_commit=lambda new_text, t=task: main_window.update_task_text(t, new_text),
-                    on_context_menu=lambda global_pos, t=task: main_window.show_task_context_menu(t),
+                    on_toggled=lambda checked, t=task: ctx.save_tasks(ctx.get_tasks()),
+                    on_commit=lambda new_text, t=task: ctx.save_tasks(ctx.get_tasks()),
+                    on_context_menu=lambda global_pos, t=task: None,
                     content_indent=8,
                 )
+                row._ctx = ctx
                 row._task_ref = task
-                main_window.task_row_widgets[id(task)] = row
                 self.add_task_row(row)
             self.refresh_header_count()
 
@@ -237,10 +239,10 @@ class TaskGroupSection(QWidget):
                 event.acceptProposedAction()
                 return
         elif event.mimeData().hasFormat("application/x-nudge-group"):
-            mw = self._main_window
-            if mw is not None:
-                pos = self.mapTo(mw.tasks_widget, event.position().toPoint())
-                mw._update_group_drop_indicator(pos)
+            ctx = self._ctx
+            if ctx is not None:
+                pos = self.mapTo(ctx.get_tasks_widget(), event.position().toPoint())
+                ctx.update_group_drop_indicator(pos)
             event.acceptProposedAction()
             return
         event.ignore()
@@ -252,10 +254,10 @@ class TaskGroupSection(QWidget):
             event.acceptProposedAction()
             return
         elif event.mimeData().hasFormat("application/x-nudge-group"):
-            mw = self._main_window
-            if mw is not None:
-                pos = self.mapTo(mw.tasks_widget, event.position().toPoint())
-                mw._update_group_drop_indicator(pos)
+            ctx = self._ctx
+            if ctx is not None:
+                pos = self.mapTo(ctx.get_tasks_widget(), event.position().toPoint())
+                ctx.update_group_drop_indicator(pos)
             event.acceptProposedAction()
             return
         event.ignore()
@@ -263,24 +265,24 @@ class TaskGroupSection(QWidget):
     def dragLeaveEvent(self, event):
         self._drag_hover_index = -1
         self._drop_indicator.hide()
-        mw = self._main_window
-        if mw is not None:
-            mw._group_drop_indicator.hide()
+        ctx = self._ctx
+        if ctx is not None:
+            ctx.hide_group_drop_indicator()
 
     def dropEvent(self, event):
         self._drag_hover_index = -1
         self._drop_indicator.hide()
-        mw = self._main_window
+        ctx = self._ctx
         if event.mimeData().hasFormat("application/x-nudge-group"):
-            if mw is not None:
-                pos = self.mapTo(mw.tasks_widget, event.position().toPoint())
-                mw._on_group_drop(pos, event.mimeData())
+            if ctx is not None:
+                pos = self.mapTo(ctx.get_tasks_widget(), event.position().toPoint())
+                ctx.on_group_drop(pos, event.mimeData())
             event.acceptProposedAction()
             return
         source = event.source()
         if source is None or not hasattr(source, "_task_ref"):
             return
         insert_index = self._drop_index_at(event.position().toPoint())
-        if mw is not None:
-            mw._on_row_dropped(source, self.group_id, insert_index)
+        if ctx is not None:
+            ctx.on_row_dropped(source, self.group_id, insert_index)
         event.acceptProposedAction()
