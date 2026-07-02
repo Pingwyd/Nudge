@@ -106,8 +106,5 @@ docs/
 dev.py
 scripts/
 
-# ─── Website (separate Vercel project) ─────────────────────────────────────
-website/
-
 # ─── Build hooks ───────────────────────────────────────────────────────────
 pyqt6_runtime_hook.py
