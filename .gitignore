@@ -105,6 +105,3 @@ docs/
 # ─── Dev scripts (not part of the app) ─────────────────────────────────────
 dev.py
 scripts/
-
-# ─── Build hooks ───────────────────────────────────────────────────────────
-pyqt6_runtime_hook.py
