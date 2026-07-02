@@ -87,6 +87,7 @@ def _ps_download(url, dest_path, timeout=120, progress_callback=None):
     if not is_windows():
         raise RuntimeError("PowerShell download fallback is Windows-only")
     ps_script = f"""
+Add-Type -AssemblyName System.Net.Http
 $url = '{url.replace("'", "''")}'
 $dest = '{str(dest_path).replace("'", "''")}'
 try {{
