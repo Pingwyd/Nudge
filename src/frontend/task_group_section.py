@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from typing import Callable, List, Optional
 
-from PyQt6.QtCore import QEvent, QMimeData, QPoint, Qt
-from PyQt6.QtGui import QDrag, QPainter, QPixmap
+from PyQt6.QtCore import QEvent, QMimeData, QPoint, Qt, QSize
+from PyQt6.QtGui import QDrag, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -18,7 +18,15 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.frontend.theme import (
+    generate_svg_icon,
+    get_theme,
+    normalize_theme_id,
+    svg_to_pixmap,
+)
 from src.frontend.widget_context import WidgetContext
+
+_CHEVRON_ICON_SIZE = 16
 
 
 class TaskGroupSection(QWidget):
@@ -46,6 +54,8 @@ class TaskGroupSection(QWidget):
         self._drag_hover_index = -1
         self._drag_start_pos = None
         self._is_dragging = False
+        self._theme_id = "dark"
+        self._search_type_label = False
         self.setAcceptDrops(True)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
@@ -53,15 +63,16 @@ class TaskGroupSection(QWidget):
         root.setContentsMargins(0, 0, 0, 4)
         root.setSpacing(4)
 
-        chevron = "▼" if self._expanded else "▶"
-        self.header_btn = QPushButton(f"{chevron}  {group.get('name', 'Group')}  ({task_count})")
+        self.header_btn = QPushButton()
         self.header_btn.setObjectName("groupHeader")
         self.header_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.header_btn.setIconSize(QSize(_CHEVRON_ICON_SIZE, _CHEVRON_ICON_SIZE))
         self.header_btn.clicked.connect(self._toggle)
         self.header_btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.header_btn.customContextMenuRequested.connect(self._open_header_menu)
         self.header_btn.installEventFilter(self)
         root.addWidget(self.header_btn)
+        self._refresh_header_chrome(task_count)
 
         self.content = QWidget()
         self.content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
@@ -84,14 +95,19 @@ class TaskGroupSection(QWidget):
     def _toggle(self):
         self._expanded = not self._expanded
         self.content.setVisible(self._expanded)
-        chevron = "▼" if self._expanded else "▶"
-        name = self.group.get("name", "Group")
-        count = len(self.task_rows)
-        self.header_btn.setText(f"{chevron}  {name}  ({count})")
+        self.refresh_header_count()
         if self.on_toggle_expanded:
             self.on_toggle_expanded(self.group_id, self._expanded)
         if self._on_header_clicked:
             self._on_header_clicked(self.group_id)
+
+    def set_content_expanded(self, expanded: bool, *, persist: bool = True) -> None:
+        """Expand/collapse content. If persist=False, don't write back to group state."""
+        self._expanded = bool(expanded)
+        self.content.setVisible(self._expanded)
+        self.refresh_header_count()
+        if persist and self.on_toggle_expanded:
+            self.on_toggle_expanded(self.group_id, self._expanded)
 
     def _open_header_menu(self, pos):
         if self.on_header_context_menu:
@@ -133,7 +149,7 @@ class TaskGroupSection(QWidget):
         mime = QMimeData()
         mime.setData("application/x-nudge-group", self.group_id.encode())
         group_name = self.group.get("name", "Group")
-        task_texts = [r._task_ref.get("text", "") for r in self.task_rows if hasattr(r, "_task_ref")]
+        task_texts = [r._task_ref.get("text", "") for r in self.task_rows if hasattr(r, "_task_ref") and r._task_ref is not None]
         mime.setText(f"{group_name}\n" + "\n".join(f"- {t}" for t in task_texts))
         drag.setMimeData(mime)
         pix = self.header_btn.grab()
@@ -189,10 +205,46 @@ class TaskGroupSection(QWidget):
                 self.add_task_row(row)
             self.refresh_header_count()
 
-    def refresh_header_count(self) -> None:
-        chevron = "▼" if self._expanded else "▶"
+    def refresh_header_count(self, visible_count: int | None = None) -> None:
+        count = len(self.task_rows) if visible_count is None else visible_count
+        self._refresh_header_chrome(count)
+
+    def update_theme(self, theme_id: str | None = None) -> None:
+        if theme_id is not None:
+            self._theme_id = normalize_theme_id(theme_id)
+        elif self._ctx is not None:
+            self._theme_id = normalize_theme_id(self._ctx.get_theme_id())
+        self._refresh_header_chrome()
+
+    def _resolve_theme_id(self) -> str:
+        if self._ctx is not None:
+            return normalize_theme_id(self._ctx.get_theme_id())
+        return normalize_theme_id(self._theme_id)
+
+    def _refresh_header_chrome(self, count: int | None = None) -> None:
+        """Apply outline chevron icon + title text (theme-aware stroke)."""
         name = self.group.get("name", "Group")
-        self.header_btn.setText(f"{chevron}  {name}  ({len(self.task_rows)})")
+        if count is None:
+            count = len(self.task_rows)
+        theme_id = self._resolve_theme_id()
+        theme = get_theme(theme_id)
+        # Active (expanded) chevron uses accent; collapsed uses muted chrome
+        if self._expanded:
+            color = theme["colors"].get("accent", theme["colors"]["text"])
+            icon_key = "chevron_down"
+        else:
+            color = theme["colors"].get("icon") or theme["colors"].get(
+                "chrome_icon", theme["colors"]["text"]
+            )
+            icon_key = "chevron_right"
+        pix = svg_to_pixmap(generate_svg_icon(icon_key, color, _CHEVRON_ICON_SIZE), _CHEVRON_ICON_SIZE)
+        self.header_btn.setIcon(QIcon(pix))
+        prefix = "Group · " if getattr(self, "_search_type_label", False) else ""
+        self.header_btn.setText(f"  {prefix}{name}  ({count})")
+
+    def set_search_type_label(self, enabled: bool) -> None:
+        self._search_type_label = bool(enabled)
+        self.refresh_header_count()
 
     def force_layout(self) -> None:
         """Force recalculation of all nested layouts so rows have correct geometry."""
@@ -251,6 +303,7 @@ class TaskGroupSection(QWidget):
         if event.mimeData().hasFormat("application/x-nudge-task-row"):
             self._drag_hover_index = self._drop_index_at(event.position().toPoint())
             self._update_indicator()
+            self._autoscroll_parent(event)
             event.acceptProposedAction()
             return
         elif event.mimeData().hasFormat("application/x-nudge-group"):
@@ -258,10 +311,24 @@ class TaskGroupSection(QWidget):
             if ctx is not None:
                 pos = self.mapTo(ctx.get_tasks_widget(), event.position().toPoint())
                 ctx.update_group_drop_indicator(pos)
+            self._autoscroll_parent(event)
             event.acceptProposedAction()
             return
         event.ignore()
 
+    def _autoscroll_parent(self, event) -> None:
+        ctx = self._ctx
+        if ctx is None or not hasattr(ctx, "scroll_area") or ctx.scroll_area is None:
+            return
+        scroll = ctx.scroll_area
+        vp = scroll.viewport()
+        local = vp.mapFromGlobal(self.mapToGlobal(event.position().toPoint()))
+        edge = 36
+        bar = scroll.verticalScrollBar()
+        if local.y() < edge:
+            bar.setValue(bar.value() - 14)
+        elif local.y() > vp.height() - edge:
+            bar.setValue(bar.value() + 14)
     def dragLeaveEvent(self, event):
         self._drag_hover_index = -1
         self._drop_indicator.hide()

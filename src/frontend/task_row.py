@@ -18,10 +18,17 @@ from src.frontend.tag_color_picker import TagColorPopup
 from src.frontend.tag_pill_widget import TagPillWidget, get_tag_color
 from src.frontend.theme import get_theme, normalize_theme_id
 from src.frontend.widget_context import WidgetContext
+from src.constants import (
+    TASK_CHECKBOX_INDICATOR,
+    TASK_ROW_CHECKBOX_SIZE,
+    TASK_ROW_MARGINS,
+)
 
 
 class TaskRowWidget(QWidget):
     """One task row: compact height, scroll area absorbs extra space — not individual rows."""
+
+    _checkbox_style_cache: dict[str, str] = {}
 
     def __init__(
         self,
@@ -45,13 +52,16 @@ class TaskRowWidget(QWidget):
         self._task_ref = None
         self._drag_start_pos = None
         self._tag_pills = []
+        self._pending_tags = None
+        self._pending_due_date = None
+        self._group_section = None
         self.setToolTip("Double-click to edit")
 
         # Horizontal fill only; vertical size comes from content, not leftover list height.
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 4, 8, 4)
+        layout.setContentsMargins(*TASK_ROW_MARGINS)
         layout.setSpacing(8)
 
         if content_indent > 0:
@@ -64,7 +74,7 @@ class TaskRowWidget(QWidget):
         self._checkbox = QCheckBox()
         self._checkbox.setChecked(checked)
         self._checkbox.stateChanged.connect(lambda state: self._handle_toggled(state == Qt.CheckState.Checked.value))
-        self._checkbox.setFixedSize(20, 20)
+        self._checkbox.setFixedSize(TASK_ROW_CHECKBOX_SIZE, TASK_ROW_CHECKBOX_SIZE)
         self._checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
         self._apply_theme_checkbox()
         layout.addWidget(self._checkbox, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -151,42 +161,109 @@ class TaskRowWidget(QWidget):
         self.set_text_size(text_size)
         QTimer.singleShot(0, self.sync_text_layout)
 
-    def _handle_toggled(self, checked):
-        if self.on_toggled:
-            self.on_toggled(checked)
-
-    def set_text_size(self, text_size):
+    def set_text_size(self, text_size, *, sync: bool = True):
+        from PyQt6.QtGui import QFont
         font = self.label.font()
         font.setPixelSize(text_size)
-        font.setBold(True)
+        font.setWeight(QFont.Weight.Medium)
         self.label.setFont(font)
-        self.label.setStyleSheet(f"font-size: {int(text_size)}px; font-weight: bold;")
+        self._task_text_size = int(text_size)
+        self._refresh_label_stylesheet()
         editor_font = self.editor.font()
         editor_font.setPixelSize(text_size)
         self.editor.setFont(editor_font)
         self.editor.setStyleSheet(f"font-size: {int(text_size)}px;")
-        self.sync_text_layout()
+        if sync:
+            self.sync_text_layout()
 
-    def set_task_font(self, font_name):
+    def set_task_font(self, font_name, *, sync: bool = True):
         """Set the font family for the task text."""
+        from PyQt6.QtGui import QFont
         if font_name == "Default (System)":
             font_name = None
-        
+
         font = self.label.font()
         if font_name:
             font.setFamily(font_name)
         else:
             font.setFamily("")
-        font.setBold(True)
+        font.setWeight(QFont.Weight.Medium)
         self.label.setFont(font)
-        
+
         editor_font = self.editor.font()
         if font_name:
             editor_font.setFamily(font_name)
         else:
             editor_font.setFamily("")
         self.editor.setFont(editor_font)
-        self.sync_text_layout()
+        if sync:
+            self.sync_text_layout()
+
+    def apply_search_highlight(self, query: str, match_kind: str = "task") -> None:
+        """Soft amber wash on matches; optional Task·/Tag· type label while searching."""
+        import html
+        plain = self._task_ref.get("text", self.label.text()) if self._task_ref else self.label.text()
+        if not query:
+            self.label.setTextFormat(Qt.TextFormat.PlainText)
+            self.label.setText(plain)
+            self._refresh_label_stylesheet()
+            self._apply_done_style(self._checkbox.isChecked())
+            return
+        theme_id = self._ctx.get_theme_id() if self._ctx else "dark"
+        theme = get_theme(theme_id)
+        bg = theme["colors"].get("search_match_bg", "rgba(245, 166, 35, 45)")
+        muted = theme["colors"].get("text_muted", "rgba(255,255,255,180)")
+        lower = plain.lower()
+        q = query.lower()
+        parts = []
+        start = 0
+        while True:
+            idx = lower.find(q, start)
+            if idx < 0:
+                parts.append(html.escape(plain[start:]))
+                break
+            parts.append(html.escape(plain[start:idx]))
+            match = html.escape(plain[idx:idx + len(query)])
+            parts.append(
+                f'<span style="background-color:{bg}; border-radius:3px;">{match}</span>'
+            )
+            start = idx + len(query)
+        # Tag-only matches: still highlight task text if query appears; else plain + label
+        body = "".join(parts) if q in lower else html.escape(plain)
+        kind = "Tag" if match_kind == "tag" else "Task"
+        size = getattr(self, "_task_text_size", 14)
+        self.label.setTextFormat(Qt.TextFormat.RichText)
+        self.label.setText(
+            f'<span style="font-size:{size}px; font-weight:500;">'
+            f'<span style="color:{muted};">{kind} · </span>{body}</span>'
+        )
+
+    def _refresh_label_stylesheet(self) -> None:
+        size = getattr(self, "_task_text_size", 14)
+        if self.label.textFormat() == Qt.TextFormat.RichText:
+            self.label.setStyleSheet("background: transparent; border: none;")
+        else:
+            self.label.setStyleSheet(f"font-size: {int(size)}px; font-weight: 500;")
+
+    def _apply_done_style(self, done: bool) -> None:
+        """Strikethrough + muted text while checked (briefly before archive)."""
+        if self.label.textFormat() == Qt.TextFormat.RichText:
+            return
+        size = getattr(self, "_task_text_size", 14)
+        if done:
+            theme_id = self._ctx.get_theme_id() if self._ctx else "dark"
+            muted = get_theme(theme_id)["colors"].get("text_muted", "rgba(255,255,255,160)")
+            self.label.setStyleSheet(
+                f"font-size: {size}px; font-weight: 500; color: {muted}; "
+                "text-decoration: line-through; background: transparent; border: none;"
+            )
+        else:
+            self._refresh_label_stylesheet()
+
+    def _handle_toggled(self, checked):
+        self._apply_done_style(checked)
+        if self.on_toggled:
+            self.on_toggled(checked)
 
     def update_theme(self, theme_id: str | None = None) -> None:
         """Refresh theme-dependent row chrome after a global theme change."""
@@ -210,9 +287,19 @@ class TaskRowWidget(QWidget):
             theme_id = "dark"
         else:
             theme_id = normalize_theme_id(theme_id)
-        theme = get_theme(theme_id)
-        from src.frontend.theme import _c, _r
-        self._checkbox.setStyleSheet(f"""
+        # Cache compiled QSS per theme — rebuilding it for every row is slow.
+        cache = TaskRowWidget._checkbox_style_cache
+        css = cache.get(theme_id)
+        if css is None:
+            theme = get_theme(theme_id)
+            from src.frontend.theme import _c, _r, generate_svg_icon
+            import base64
+            ind = TASK_CHECKBOX_INDICATOR
+            on_accent = _c(theme, "on_accent")
+            check_svg = generate_svg_icon("check", on_accent, ind)
+            check_b64 = base64.b64encode(check_svg.encode("utf-8")).decode("ascii")
+            check_url = f"data:image/svg+xml;base64,{check_b64}"
+            css = f"""
             QCheckBox {{
                 background: transparent;
                 border: none;
@@ -221,16 +308,23 @@ class TaskRowWidget(QWidget):
                 spacing: 0px;
             }}
             QCheckBox::indicator {{
-                width: 18px;
-                height: 18px;
+                width: {ind}px;
+                height: {ind}px;
                 border-radius: {_r(theme, "checkbox")}px;
                 border: 1px solid {_c(theme, "checkbox_border")};
                 background-color: {_c(theme, "checkbox_indicator")};
             }}
+            QCheckBox::indicator:hover {{
+                border: 1px solid {_c(theme, "accent")};
+            }}
             QCheckBox::indicator:checked {{
                 background-color: {_c(theme, "checkbox_checked")};
+                border: 1px solid {_c(theme, "accent")};
+                image: url({check_url});
             }}
-        """)
+            """
+            cache[theme_id] = css
+        self._checkbox.setStyleSheet(css)
 
     def paintEvent(self, event):
         """Draw a separator line at the bottom — QSS border is overridden by glassPanel."""
@@ -251,8 +345,8 @@ class TaskRowWidget(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if not self._editing:
-            self.sync_text_layout()
+        # Do not sync_text_layout here. Window resize already fires this for
+        # every row on every mouse move; MainWindow debounces a single pass.
 
     def _update_badges_layout(self):
         """Recalculate badges width and invalidate parent layout.
@@ -329,21 +423,48 @@ class TaskRowWidget(QWidget):
 
     def set_task_ref(self, task_ref):
         self._task_ref = task_ref
+        self._update_row_from_task()
 
-        # Update due date chip
-        theme_id = self._ctx.get_theme_id() if self._ctx else "dark"
-        self._due_date_chip.set_due_date(task_ref.get("dueDate"), theme_id)
+    def update_task(self, task, group_section=None, on_toggled=None, on_commit=None, on_context_menu=None):
+        """Update this row with new task data, reusing existing child widgets."""
+        self._task_ref = task
+        self._group_section = group_section
+        if on_toggled is not None:
+            self.on_toggled = on_toggled
+        if on_commit is not None:
+            self.on_commit = on_commit
+        if on_context_menu is not None:
+            self.on_context_menu = on_context_menu
+        self._update_row_from_task()
+
+    def _update_row_from_task(self):
+        """Update visual state from _task_ref, deferring expensive child creation."""
+        if self._task_ref is None:
+            return
+        task = self._task_ref
+
+        # Update checkbox
+        self._checkbox.blockSignals(True)
+        self._checkbox.setChecked(task.get("done", False))
+        self._checkbox.blockSignals(False)
+
+        # Update text label
+        self.label.setText(task.get("text", ""))
 
         # Update priority indicator
-        self._priority_indicator.set_priority(task_ref.get("priority"), theme_id)
+        theme_id = self._ctx.get_theme_id() if self._ctx else "dark"
+        self._priority_indicator.set_priority(task.get("priority"), theme_id)
 
-        # Update tag pills
-        self._render_tag_pills()
+        # Update tags — defer pill creation until visible
+        self._update_tags_lazy(task.get("tags", []))
+
+        # Update due date — defer chip creation until visible
+        self._update_due_date_lazy(task.get("dueDate"))
 
         # Update countdown
         has_reminder = False
         if self._ctx is not None:
-            cfg = self._ctx.get_timer_for_task(task_ref["id"])
+            cfg = self._ctx.get_timer_for_task(task["id"])
             if cfg is not None and cfg.enabled:
                 has_reminder = True
         if has_reminder:
@@ -351,40 +472,70 @@ class TaskRowWidget(QWidget):
         else:
             self._stop_countdown()
 
-        # Force layout recalc — badge children changed, HBoxLayout needs new sizes
+        # Force layout recalc. Never call show() here — unparented rows become
+        # top-level windows (ghost frames). Layout addWidget shows when needed.
         self._update_badges_layout()
 
-    def _render_tag_pills(self):
-        """Render tag pills inline to the right of text."""
-        # Clear existing pills
-        for pill in self._tag_pills:
+    def _update_tags_lazy(self, tags):
+        """Store pending tags; create pills only if row is visible."""
+        self._pending_tags = tags
+        if not self.isVisible():
+            return
+        self._initialize_tags(tags)
+
+    def _initialize_tags(self, tags):
+        """Actually create tag pill widgets for the given tags."""
+        if not tags:
+            for pill in self._tag_pills:
+                self._tags_layout.removeWidget(pill)
+                pill.deleteLater()
+            self._tag_pills.clear()
+            self._tags_container.hide()
+            self._update_badges_layout()
+            return
+
+        custom_colors = self._task_ref.get("tagColors", {}) if self._task_ref else {}
+
+        # Remove excess existing pills
+        while len(self._tag_pills) > len(tags):
+            pill = self._tag_pills.pop()
             self._tags_layout.removeWidget(pill)
             pill.deleteLater()
-        self._tag_pills.clear()
-        
-        if not self._task_ref:
-            self._tags_container.hide()
-            return
-        
-        tags = self._task_ref.get("tags", [])
-        if not tags:
-            self._tags_container.hide()
-            return
-        
-        # Get custom colors from task
-        custom_colors = self._task_ref.get("tagColors", {})
-        
-        # Create pills for each tag
-        for tag in tags:
+
+        # Create or reuse pills
+        for i, tag in enumerate(tags):
             color = get_tag_color(tag, custom_colors)
-            pill = TagPillWidget(tag, color)
-            pill.color_change_requested.connect(self._on_tag_color_change)
-            self._tags_layout.addWidget(pill)
-            self._tag_pills.append(pill)
-        
-        # Adjust container width to fit content
+            if i < len(self._tag_pills):
+                pill = self._tag_pills[i]
+                pill.update_tag(tag, color)
+            else:
+                pill = TagPillWidget(tag, color)
+                pill.color_change_requested.connect(self._on_tag_color_change)
+                self._tags_layout.addWidget(pill)
+                self._tag_pills.append(pill)
+            pill.show()
+
         self._tags_container.adjustSize()
         self._tags_container.show()
+        self._update_badges_layout()
+
+    def _update_due_date_lazy(self, due_date):
+        """Store pending due date; set on chip only if row is visible."""
+        self._pending_due_date = due_date
+        if not self.isVisible():
+            return
+        self._initialize_due_date(due_date)
+
+    def _initialize_due_date(self, due_date):
+        """Set due date on existing chip, or hide it."""
+        theme_id = self._ctx.get_theme_id() if self._ctx else "dark"
+        if due_date:
+            self._due_date_chip.set_due_date(due_date, theme_id)
+            self._due_date_chip.show()
+        else:
+            self._due_date_chip.hide()
+            self._due_date_chip.set_due_date(None, theme_id)
+        self._update_badges_layout()
 
     def _on_tag_color_change(self, tag_name: str):
         """Handle tag color change request - show inline floating palette."""
@@ -476,7 +627,7 @@ class TaskRowWidget(QWidget):
         if parent and hasattr(parent, "app_state"):
             theme_id = normalize_theme_id(parent.app_state.get("theme", "dark"))
         theme = get_theme(theme_id)
-        accent = theme["colors"].get("accent", "#4fc3f7")
+        accent = theme["colors"].get("accent", "#F5A623")
         self._countdown_label.setStyleSheet(
             f"font-size: 10px; color: {accent}; background: transparent; border: none;"
         )
@@ -498,15 +649,47 @@ class TaskRowWidget(QWidget):
                 mime.setText(task_text)
                 drag.setMimeData(mime)
                 pix = self.grab()
-                ghost = QPixmap(pix.size())
+                # Lifted ghost: slightly larger canvas, soft shadow, offset draw
+                margin = 6
+                ghost = QPixmap(pix.width() + margin * 2, pix.height() + margin * 2)
                 ghost.fill(Qt.GlobalColor.transparent)
                 p = QPainter(ghost)
-                p.setOpacity(0.55)
-                p.drawPixmap(0, 0, pix)
+                p.setRenderHint(QPainter.RenderHint.Antialiasing)
+                shadow = QColor(0, 0, 0, 70)
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QBrush(shadow))
+                p.drawRoundedRect(margin + 2, margin + 3, pix.width(), pix.height(), 6, 6)
+                p.setOpacity(0.92)
+                p.translate(1, -1)  # subtle lift offset
+                p.drawPixmap(margin, margin, pix)
                 p.end()
                 drag.setPixmap(ghost)
-                drag.setHotSpot(delta)
+                drag.setHotSpot(delta + QPoint(margin, margin))
+                scroll = None
+                if self._ctx is not None and hasattr(self._ctx, "scroll_area"):
+                    scroll = self._ctx.scroll_area
+                timer = None
+                if scroll is not None:
+                    timer = QTimer(self)
+                    timer.setInterval(40)
+
+                    def _tick(sc=scroll):
+                        from PyQt6.QtGui import QCursor
+                        vp = sc.viewport()
+                        local = vp.mapFromGlobal(QCursor.pos())
+                        edge = 36
+                        bar = sc.verticalScrollBar()
+                        if local.y() < edge:
+                            bar.setValue(bar.value() - 18)
+                        elif local.y() > vp.height() - edge:
+                            bar.setValue(bar.value() + 18)
+
+                    timer.timeout.connect(_tick)
+                    timer.start()
                 drag.exec(Qt.DropAction.MoveAction)
+                if timer is not None:
+                    timer.stop()
+                    timer.deleteLater()
                 self._drag_start_pos = None
                 return
         super().mouseMoveEvent(event)
@@ -536,3 +719,12 @@ class TaskRowWidget(QWidget):
             event.accept()
             return
         super().contextMenuEvent(event)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self._pending_tags is not None:
+            self._initialize_tags(self._pending_tags)
+            self._pending_tags = None
+        if self._pending_due_date is not None:
+            self._initialize_due_date(self._pending_due_date)
+            self._pending_due_date = None

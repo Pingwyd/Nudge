@@ -17,6 +17,7 @@ from src.backend.state_manager import StateManager
 from src.backend.task_groups import (GENERAL_GROUP_ID, sorted_groups,
                                     tasks_for_group,
                                     rebuild_tasks_preserving_groups)
+from src.constants import RENDER_DEBOUNCE_MS, ROW_POOL_MAX
 from src.frontend.task_row import TaskRowWidget
 from src.frontend.theme import get_theme, normalize_theme_id
 from src.frontend.themed_message_dialog import ThemedMessageDialog
@@ -61,6 +62,7 @@ class TaskContext:
     on_update_empty_state: Callable[[], None] | None = None
     on_update_tag_filter: Callable[[], None] | None = None
     on_apply_tag_filter: Callable[[], None] | None = None
+    on_apply_search_filter: Callable[[], None] | None = None
     on_sync_viewport_width: Callable[[], None] | None = None
     on_sync_row_text_layouts: Callable[[], None] | None = None
     on_enable_resize_hover: Callable[[QWidget], None] | None = None
@@ -74,6 +76,11 @@ class TaskContext:
 class TaskController:
     def __init__(self, ctx: TaskContext):
         self._ctx = ctx
+        self._widget_pool: list = []
+        self._render_timer = QTimer()
+        self._render_timer.setSingleShot(True)
+        self._render_timer.setInterval(RENDER_DEBOUNCE_MS)
+        self._render_timer.timeout.connect(self._do_render)
 
     # ------------------------------------------------------------------
     # Task creation
@@ -243,19 +250,87 @@ class TaskController:
             QTimer.singleShot(0, lambda r=last_row: self._ctx.scroll_area.ensureWidgetVisible(r, 0, 80))
 
     # ------------------------------------------------------------------
-    # Full render (initial load / group-structure changes)
+    # Widget pool
     # ------------------------------------------------------------------
 
-    def render_tasks(self) -> None:
+    def _acquire_row(self, task, text_size, content_indent, toggle_cb, commit_cb, context_menu_cb):
+        """Get a TaskRowWidget from the pool or create new."""
+        font_name = self._ctx.state_manager.state.get("taskFont", "Default (System)")
+        if self._widget_pool:
+            row = self._widget_pool.pop()
+        else:
+            # Parent immediately so the row never becomes a top-level window.
+            row = TaskRowWidget(
+                task["text"],
+                checked=task.get("done", False),
+                text_size=text_size,
+                on_toggled=toggle_cb,
+                on_commit=commit_cb,
+                on_context_menu=context_menu_cb,
+                content_indent=content_indent,
+                parent=self._ctx.tasks_widget,
+            )
+            row.hide()
+            row._ctx = self._ctx.widget_context
+        # Visibility filters hide rows with no _task_ref; bind on create and reuse.
+        row.update_task(
+            task,
+            on_toggled=toggle_cb,
+            on_commit=commit_cb,
+            on_context_menu=context_menu_cb,
+        )
+        row.set_text_size(text_size, sync=False)
+        if hasattr(row, "set_task_font"):
+            row.set_task_font(font_name, sync=False)
+        return row
+
+    def _release_all_rows(self):
+        """Return all tracked rows to the pool (hidden, still parented)."""
+        for row in self._ctx.task_row_widgets.values():
+            row.hide()
+            # Do not setParent(None): that promotes the row to a top-level
+            # window and briefly paints ghost frames on Windows/DWM.
+            self._widget_pool.append(row)
+        self._ctx.task_row_widgets.clear()
+
+    # ------------------------------------------------------------------
+    # Debounced render
+    # ------------------------------------------------------------------
+
+    def render_tasks(self, force=False):
+        """Public API — debounced unless force=True."""
+        if force:
+            self._render_timer.stop()
+            self._do_render()
+        else:
+            self.schedule_render()
+
+    def schedule_render(self):
+        """Debounced render — batches rapid state changes."""
+        if not self._render_timer.isActive():
+            self._render_timer.start()
+
+    def _do_render(self) -> None:
         from src.frontend.priority_header import PriorityHeaderWidget
         from src.frontend.task_group_section import TaskGroupSection
 
         self._ctx.tasks_widget.setUpdatesEnabled(False)
+
+        # Collect existing row widgets into pool
+        old_widgets = []
         while self._ctx.tasks_layout.count():
             child = self._ctx.tasks_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-        self._ctx.task_row_widgets.clear()
+            w = child.widget() if child else None
+            if w is not None:
+                old_widgets.append(w)
+
+        self._release_all_rows()
+
+        # Delete non-TaskRowWidget items (headers, sections, stretch)
+        for w in old_widgets:
+            if not isinstance(w, TaskRowWidget):
+                w.deleteLater()
+
         self._ctx.group_sections.clear()
 
         text_size = int(self._ctx.state_manager.state.get("taskTextSize", 14))
@@ -269,22 +344,19 @@ class TaskController:
             normal_tasks = [t for t in self._ctx.tasks if t.get("priority") != "high"]
 
             if high_tasks:
-                header = PriorityHeaderWidget(theme_id=theme_id)
+                header = PriorityHeaderWidget(
+                    theme_id=theme_id, parent=self._ctx.tasks_widget
+                )
                 self._ctx.tasks_layout.addWidget(header, 0, Qt.AlignmentFlag.AlignTop)
 
             for task in high_tasks:
-                row = TaskRowWidget(
-                    task["text"],
-                    checked=task.get("done", False),
-                    text_size=text_size,
-                    on_toggled=lambda checked, t=task: self.toggle_task(t, checked),
-                    on_commit=lambda new_text, t=task: self.update_task_text(t, new_text),
-                    on_context_menu=lambda global_pos, t=task: self._show_task_context_menu_at(t, global_pos),
-                    content_indent=0,
+                row = self._acquire_row(
+                    task, text_size, 0,
+                    lambda checked, t=task: self.toggle_task(t, checked),
+                    lambda new_text, t=task: self.update_task_text(t, new_text),
+                    lambda global_pos, t=task: self._show_task_context_menu_at(t, global_pos),
                 )
                 self._ctx.tasks_layout.addWidget(row, 0, Qt.AlignmentFlag.AlignTop)
-                row._ctx = self._ctx.widget_context
-                row.set_task_ref(task)
                 self._ctx.task_row_widgets[id(task)] = row
 
             if high_tasks and normal_tasks:
@@ -292,18 +364,13 @@ class TaskController:
                 row.update()
 
             for task in normal_tasks:
-                row = TaskRowWidget(
-                    task["text"],
-                    checked=task.get("done", False),
-                    text_size=text_size,
-                    on_toggled=lambda checked, t=task: self.toggle_task(t, checked),
-                    on_commit=lambda new_text, t=task: self.update_task_text(t, new_text),
-                    on_context_menu=lambda global_pos, t=task: self._show_task_context_menu_at(t, global_pos),
-                    content_indent=0,
+                row = self._acquire_row(
+                    task, text_size, 0,
+                    lambda checked, t=task: self.toggle_task(t, checked),
+                    lambda new_text, t=task: self.update_task_text(t, new_text),
+                    lambda global_pos, t=task: self._show_task_context_menu_at(t, global_pos),
                 )
                 self._ctx.tasks_layout.addWidget(row, 0, Qt.AlignmentFlag.AlignTop)
-                row._ctx = self._ctx.widget_context
-                row.set_task_ref(task)
                 self._ctx.task_row_widgets[id(task)] = row
         else:
             self._ctx.tasks_widget.setAcceptDrops(False)
@@ -317,20 +384,16 @@ class TaskController:
                     on_toggle_expanded=self._ctx.on_save_group_expanded,
                     on_header_context_menu=self._ctx.on_show_group_header_menu,
                     on_header_clicked=self._ctx.on_select_active_group,
+                    parent=self._ctx.tasks_widget,
                 )
                 for task in group_tasks:
-                    row = TaskRowWidget(
-                        task["text"],
-                        checked=task.get("done", False),
-                        text_size=text_size,
-                        on_toggled=lambda checked, t=task: self.toggle_task(t, checked),
-                        on_commit=lambda new_text, t=task: self.update_task_text(t, new_text),
-                        on_context_menu=lambda global_pos, t=task: self._show_task_context_menu_at(t, global_pos),
-                        content_indent=8,
+                    row = self._acquire_row(
+                        task, text_size, 8,
+                        lambda checked, t=task: self.toggle_task(t, checked),
+                        lambda new_text, t=task: self.update_task_text(t, new_text),
+                        lambda global_pos, t=task: self._show_task_context_menu_at(t, global_pos),
                     )
                     section.add_task_row(row)
-                    row._ctx = self._ctx.widget_context
-                    row.set_task_ref(task)
                     self._ctx.task_row_widgets[id(task)] = row
                 section._ctx = self._ctx.widget_context
                 section.refresh_header_count()
@@ -338,6 +401,14 @@ class TaskController:
                 self._ctx.group_sections[group_id] = section
 
         self._ctx.tasks_layout.addStretch(1)
+
+        # Keep a bounded pool for the next render instead of destroying every spare row.
+        keep = max(ROW_POOL_MAX, len(self._ctx.task_row_widgets))
+        while len(self._widget_pool) > keep:
+            row = self._widget_pool.pop()
+            row.hide()
+            row.deleteLater()
+
         self._ctx.on_sync_viewport_width()
         self._ctx.on_sync_row_text_layouts()
         self._ctx.flat_drop_indicator.raise_()
@@ -345,10 +416,43 @@ class TaskController:
         self._ctx.tasks_widget.setUpdatesEnabled(True)
         self._ctx.on_update_empty_state()
         self._ctx.on_update_tag_filter()
-        self._ctx.on_apply_tag_filter()
+        # Tag + search visibility share one path; calling either is enough.
+        if self._ctx.on_apply_search_filter is not None:
+            self._ctx.on_apply_search_filter()
+        elif self._ctx.on_apply_tag_filter is not None:
+            self._ctx.on_apply_tag_filter()
 
         if self._ctx.on_enable_resize_hover is not None:
             self._ctx.on_enable_resize_hover(self._ctx.tasks_widget.parentWidget())
+
+    def _recalculate_section_dividers(self):
+        """Recalculate which row is the last high-priority task (gets thick divider)."""
+        groups_enabled = self._ctx.app_state.get("groupsEnabled", DEFAULT_GROUPS_ENABLED)
+
+        if not groups_enabled:
+            tasks = self._ctx.tasks
+            high_tasks = [t for t in tasks if t.get("priority") == "high" and not t.get("done")]
+            last_high_id = id(high_tasks[-1]) if high_tasks else None
+            for task in tasks:
+                row = self._ctx.task_row_widgets.get(id(task))
+                if row is None:
+                    continue
+                was_end = row._is_section_end
+                row._is_section_end = (id(task) == last_high_id and bool(high_tasks))
+                if was_end != row._is_section_end:
+                    row.update()
+        else:
+            for group_id, section in self._ctx.group_sections.items():
+                last_high_row = None
+                for row in section.task_rows:
+                    task = getattr(row, "_task_ref", None)
+                    if task and task.get("priority") == "high" and not task.get("done"):
+                        last_high_row = row
+                for row in section.task_rows:
+                    was_end = row._is_section_end
+                    row._is_section_end = (row is last_high_row)
+                    if was_end != row._is_section_end:
+                        row.update()
 
     # ------------------------------------------------------------------
     # Row widget management
@@ -367,7 +471,12 @@ class TaskController:
             on_commit=lambda new_text, t=task: self.update_task_text(t, new_text),
             on_context_menu=lambda global_pos, t=task: self._show_task_context_menu_at(t, global_pos),
             content_indent=0 if not groups_enabled else 8,
+            parent=self._ctx.tasks_widget,
         )
+        row.hide()
+        font_name = self._ctx.state_manager.state.get("taskFont", "Default (System)")
+        if hasattr(row, "set_task_font"):
+            row.set_task_font(font_name, sync=False)
         if not groups_enabled:
             is_high = task.get("priority") == "high"
             # Scan layout to find the correct insert position.
@@ -418,7 +527,10 @@ class TaskController:
         self._ctx.on_sync_row_text_layouts()
         self._ctx.on_update_empty_state()
         self._ctx.on_update_tag_filter()
-        self._ctx.on_apply_tag_filter()
+        if self._ctx.on_apply_search_filter is not None:
+            self._ctx.on_apply_search_filter()
+        elif self._ctx.on_apply_tag_filter is not None:
+            self._ctx.on_apply_tag_filter()
         return row
 
     def _remove_task_row_widget(self, task: dict) -> None:
@@ -501,9 +613,11 @@ class TaskController:
             if self._ctx.sound_manager is not None:
                 self._ctx.sound_manager.play_completion()
             self.archive_task(task_ref)
+            self._recalculate_section_dividers()
             return
 
         self._ctx.store.save(self._ctx.tasks)
+        self._recalculate_section_dividers()
 
     def archive_task(self, task_ref: dict) -> None:
         if task_ref not in self._ctx.tasks:
@@ -531,7 +645,10 @@ class TaskController:
         self._ctx.store.save(self._ctx.tasks)
         self._remove_task_row_widget(task_ref)
         if self._ctx.history_dialog is not None:
-            self._ctx.history_dialog.add_external_archived_task(archived_task)
+            try:
+                self._ctx.history_dialog.add_external_archived_task(archived_task)
+            except RuntimeError:
+                self._ctx.history_dialog = None
 
         archived_task["_archivedFromIndex"] = original_index
         self._ctx.last_archived_task = archived_task
@@ -752,7 +869,7 @@ class TaskController:
         for i, g in enumerate(groups):
             g["order"] = i
         self._ctx.group_store.save(self._ctx.groups_data)
-        self._ctx.on_render_tasks()
+        self.render_tasks(force=True)
 
     def _on_row_dropped(self, row_widget, target_group_id: str, insert_index: int) -> None:
         task_ref = getattr(row_widget, "_task_ref", None)
@@ -794,6 +911,7 @@ class TaskController:
                 new_section.add_task_row(row_widget, index=insert_index)
                 new_section.refresh_header_count()
         self._ctx.on_sync_row_text_layouts()
+        self._recalculate_section_dividers()
 
     # ------------------------------------------------------------------
     # Undo
@@ -808,7 +926,13 @@ class TaskController:
             self._ctx.active_undo_toast = None
 
         from PyQt6.QtCore import Qt as _Qt
-        toast = UndoToast(self._ctx.main_window, f"Completed: {task_text}", self._undo_last_archive, dismissed_callback=on_dismissed)
+        toast = UndoToast(
+            self._ctx.main_window,
+            "Task completed",
+            self._undo_last_archive,
+            dismissed_callback=on_dismissed,
+            detail=task_text,
+        )
         toast.setWindowFlags(
             _Qt.WindowType.FramelessWindowHint |
             _Qt.WindowType.Tool | _Qt.WindowType.WindowStaysOnTopHint
@@ -959,6 +1083,7 @@ class TaskController:
             row = self._ctx.task_row_widgets.get(id(task_ref))
             if row:
                 row.set_task_ref(task_ref)
+        self._recalculate_section_dividers()
 
     def _clear_task_priority(self, task_ref: dict) -> None:
         task_ref["priority"] = None
@@ -970,6 +1095,7 @@ class TaskController:
             row = self._ctx.task_row_widgets.get(id(task_ref))
             if row:
                 row.set_task_ref(task_ref)
+        self._recalculate_section_dividers()
 
     # ------------------------------------------------------------------
     # Recurrence CRUD

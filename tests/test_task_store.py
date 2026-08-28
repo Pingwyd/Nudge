@@ -71,11 +71,13 @@ class TestTaskStoreSave:
 
     def test_save_empty_list(self, task_store):
         task_store.save([])
+        task_store.flush()
         assert task_store.filepath.exists()
         assert json.loads(task_store.filepath.read_text(encoding="utf-8")) == []
 
     def test_save_tasks(self, task_store, sample_task):
         task_store.save([sample_task])
+        task_store.flush()
         loaded = json.loads(task_store.filepath.read_text(encoding="utf-8"))
         assert len(loaded) == 1
         assert loaded[0]["text"] == "Buy groceries"
@@ -83,6 +85,7 @@ class TestTaskStoreSave:
     def test_save_is_atomic(self, task_store, sample_task):
         """Verify atomic write doesn't leave temp files."""
         task_store.save([sample_task])
+        task_store.flush()
         temp_files = list(task_store.filepath.parent.glob("*.tmp"))
         assert len(temp_files) == 0
 

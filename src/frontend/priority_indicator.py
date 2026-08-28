@@ -17,10 +17,12 @@ class PriorityIndicator(QLabel):
     def set_priority(self, priority: str | None, theme_id: str = "dark"):
         """Set the priority to display."""
         if priority == "high":
-            theme = get_theme(theme_id)
-            accent = theme["colors"].get("accent", "#4fc3f7")
+            theme = get_theme(normalize_theme_id(theme_id))
+            accent = theme["colors"].get("accent", "#F5A623")
             self.setText("\u26a1")  # Lightning bolt emoji
-            self.setStyleSheet(f"color: {accent}; font-size: 12px; background: transparent; border: none;")
+            self.setStyleSheet(
+                f"color: {accent}; font-size: 12px; background: transparent; border: none;"
+            )
             self.show()
         else:
             self.hide()

@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class GroupContext:
     """Bundles the attributes GroupController needs from MainWindow."""
+    main_window: Any
     groups_data: dict
     group_store: Any
     store: Any
@@ -68,7 +69,9 @@ class GroupController:
         if idx < 0:
             return
         if self._ctx.group_combo.currentIndex() != idx:
+            self._ctx.group_combo.blockSignals(True)
             self._ctx.group_combo.setCurrentIndex(idx)
+            self._ctx.group_combo.blockSignals(False)
 
     def _save_group_expanded(self, group_id: str, expanded: bool) -> None:
         group = group_by_id(self._ctx.groups_data, group_id)
@@ -80,7 +83,13 @@ class GroupController:
     # ── CRUD ─────────────────────────────────────────────────────────────
 
     def _add_group_dialog(self) -> None:
-        dlg = ThemedInputDialog(None, title="New Task Group", label="Group name:")
+        dlg = ThemedInputDialog(
+            self._ctx.main_window,
+            title="New group",
+            label="",
+            placeholder="Group name",
+            ok_label="Create",
+        )
         if not dlg.exec() == QDialog.DialogCode.Accepted:
             return
         name = dlg.get_text().strip()
@@ -97,7 +106,7 @@ class GroupController:
         group = group_by_id(self._ctx.groups_data, group_id)
         if group is None:
             return
-        dlg = ThemedInputDialog(None, title="Rename Group", label="Group name:", default_text=group["name"])
+        dlg = ThemedInputDialog(self._ctx.main_window, title="Rename Group", label="Group name:", default_text=group["name"])
         if not dlg.exec() == QDialog.DialogCode.Accepted:
             return
         name = dlg.get_text().strip()
@@ -112,7 +121,7 @@ class GroupController:
 
     def _delete_group(self, group_id: str) -> None:
         if group_id == GENERAL_GROUP_ID:
-            ThemedMessageDialog.information(None, "Cannot Delete", "The General group cannot be deleted.")
+            ThemedMessageDialog.information(self._ctx.main_window, "Cannot Delete", "The General group cannot be deleted.")
             return
         group = group_by_id(self._ctx.groups_data, group_id)
         if group is None:
@@ -121,7 +130,7 @@ class GroupController:
         message = f"Delete group \"{group['name']}\"?"
         if count:
             message += f"\n{count} task(s) will move to General."
-        if not ThemedMessageDialog.question(None, "Delete Group", message, default_yes=False):
+        if not ThemedMessageDialog.question(self._ctx.main_window, "Delete Group", message, default_yes=False):
             return
         for task in self._ctx.tasks:
             if task.get("groupId") == group_id:

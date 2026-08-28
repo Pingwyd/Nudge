@@ -2,6 +2,7 @@ import ctypes
 import logging
 import sys
 import threading
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -52,6 +53,7 @@ from src.constants import (ADD_GROUP_BTN_SIZE, CENTRAL_WIDGET_MARGINS,
                            OPACITY_FULL, OPACITY_ICONS, RESIZE_DEBOUNCE_MS,
                            SECONDS_PER_DAY, SETTINGS_ICON_SIZE,
                            TASKS_LAYOUT_SPACING)
+from src.frontend.dim_overlay import DimOverlay
 from src.frontend.dialog_manager import DialogManager
 from src.frontend.feedback_dialog import FeedbackDialog
 from src.frontend.frameless_chrome import FramelessChromeController
@@ -64,13 +66,15 @@ from src.frontend.settings_dialog import SettingsDialog
 from src.frontend.shortcut_manager import ShortcutManager
 from src.frontend.tag_filter_dropdown import TagFilterDropdown
 from src.frontend.task_controller import TaskContext, TaskController
+from src.frontend.task_search_bar import TaskSearchBar
 from src.frontend.task_group_section import TaskGroupSection
 from src.frontend.task_row import TaskRowWidget
 from src.frontend.theme import (_c, apply_theme_to_app,
                                 footer_history_button_stylesheet,
                                 generate_svg_icon, get_theme, menu_stylesheet,
                                 normalize_theme_id, overflow_menu_stylesheet,
-                                refresh_glass_shells, svg_to_pixmap)
+                                refresh_glass_shells, search_icon_pixmap,
+                                svg_to_pixmap)
 from src.frontend.themed_input_dialog import ThemedInputDialog
 from src.frontend.themed_message_dialog import ThemedMessageDialog
 from src.frontend.tutorial_dialog import TutorialDialog
@@ -96,8 +100,16 @@ class GlowOverlay(QWidget):
         self._center = QPointF(GLOW_HIDDEN_X, GLOW_HIDDEN_X)
         self._radius = GLOW_RADIUS
         self._visible = False
+        self._theme_id = "dark"
+
+    def set_theme_id(self, theme_id: str) -> None:
+        self._theme_id = normalize_theme_id(theme_id)
 
     def set_glow_center(self, point: QPointF):
+        # Skip mouse glow on light / OLED — white radial reads as noise
+        if self._theme_id in ("light", "oled"):
+            self.hide_glow()
+            return
         self._center = point
         self._visible = True
         self.update()
@@ -139,6 +151,7 @@ class GlowOverlay(QWidget):
 
 class MainWindow(QMainWindow):
     _update_check_done = pyqtSignal(object)
+    theme_applied = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -164,6 +177,11 @@ class MainWindow(QMainWindow):
         if self.app_state.get("pinnedToDesktop") and self.app_state.get("alwaysOnTop"):
             reconcile_layer_settings(self.app_state)
             self.state_manager.save()
+        # Apply OS theme on first launch or when followOsTheme is enabled
+        if self.app_state.get("followOsTheme", True):
+            from src.backend.state_manager import detect_os_theme
+            os_theme = detect_os_theme()
+            self.app_state["theme"] = os_theme
         self.task_text_size = int(self.app_state.get("taskTextSize", 14))
         self.title_label = None
         self._tray_hotkey_id = None
@@ -176,26 +194,34 @@ class MainWindow(QMainWindow):
         self._escape_timer.timeout.connect(lambda: setattr(self, '_escape_count', 0))
         self._last_archived_task = None
         self._active_undo_toast = None
+        self._pin_allow_minimize = False
+        self._tray_toggle_at = 0.0
 
         self._hotkey_filter = GlobalHotkeyFilter()
         QApplication.instance().installNativeEventFilter(self._hotkey_filter)
-        self._hotkey_filter.set_hwnd(int(self.winId()))
+        self._hotkey_filter.theme_changed.connect(self._on_os_theme_changed, Qt.ConnectionType.QueuedConnection)
+        self._hotkey_registered_on_show = False
+
+        self._theme_poll_timer = QTimer(self)
+        self._theme_poll_timer.timeout.connect(self._on_theme_poll)
+        self._theme_poll_timer.start(3000)
 
         self._escape_sc = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
         self._escape_sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self._escape_sc.activated.connect(self._on_escape_pressed)
         self._resize_timer = QTimer(self)
         self._resize_timer.setSingleShot(True)
-        self._resize_timer.timeout.connect(self._sync_task_row_text_layouts)
+        self._resize_timer.timeout.connect(self._on_resize_settled)
+        self._resize_live = False
 
         self.init_ui()
         from PyQt6.QtWidgets import QApplication as _QA
         _QA.instance().installEventFilter(self)
         self._restore_window_geometry()
+        # Bind hotkeys to this HWND before first registration (NULL-hwnd
+        # registration is what broke tray toggle after the v2 refactor).
+        self._hotkey_filter.set_hwnd(int(self.winId()))
         self._shortcut_manager.register_all()
-        
-        # Render any loaded tasks on boot
-        self.render_tasks()  # FIX-A1: initial load — full render required
         
         # Check for lingering tasks from yesterday and notify
         if self.app_state.get("showBootNotification", DEFAULT_SHOW_BOOT_NOTIFICATION):
@@ -203,9 +229,10 @@ class MainWindow(QMainWindow):
 
         # Purge history tasks older than the retention period
         self._purge_old_history()
-        
-        # Apply visual and functional settings from state
-        self.apply_settings()
+
+        # Apply flags/theme/geometry while still hidden — show() happens in main.py
+        # after controllers + first render, so DWM never paints a wrong-sized frame.
+        self.apply_settings(show_window=False)
 
         # Ensure DWM shadow is disabled after the window is fully shown
         QTimer.singleShot(DWM_SHADOW_DISABLE_DELAY_MS, self._reapply_dwm_shadow_disable)
@@ -233,6 +260,7 @@ class MainWindow(QMainWindow):
         self._migrate_task_reminders()
         self._timer_manager.timer_fired.connect(self._on_timer_fired)
         self._tray.reminders_requested.connect(self._open_reminders)
+        self._tray.quick_add_requested.connect(self._tray_quick_add)
         self.app_state["timers"] = self._timer_manager.to_list()
 
         # WidgetContext — used by child widgets instead of a MainWindow back-reference
@@ -265,6 +293,7 @@ class MainWindow(QMainWindow):
             on_update_empty_state=self._update_empty_state,
             on_update_tag_filter=self._update_tag_filter,
             on_apply_tag_filter=self._apply_tag_filter,
+            on_apply_search_filter=self._apply_search_filter,
             on_sync_viewport_width=self._sync_task_list_viewport_width,
             on_sync_row_text_layouts=self._sync_task_row_text_layouts,
             on_enable_resize_hover=self._enable_resize_hover_tracking,
@@ -277,10 +306,13 @@ class MainWindow(QMainWindow):
             on_select_active_group=self._select_active_group,
         )
         self._task_controller = TaskController(self._task_ctx)
+        # First paint of the task list while still hidden (main.py shows the window).
+        self._task_controller.render_tasks(force=True)
         self.migrate_completed_tasks_to_history()
 
         # GroupController — extracted group CRUD, combo, menu, move
         self._group_ctx = GroupContext(
+            main_window=self,
             groups_data=self.groups_data,
             group_store=self.group_store,
             store=self.store,
@@ -429,11 +461,18 @@ class MainWindow(QMainWindow):
             self.width(),
             self.height(),
         )
+        self.state_manager.flush()
         self.app_state = self.state_manager.state
 
     def closeEvent(self, event):
         self._persist_window_geometry()
+        self.store.flush()
+        self.history_store.flush()
+        self.group_store.flush()
         self._resize_timer.stop()
+        if self._resize_live and self.tasks_widget is not None:
+            self.tasks_widget.setUpdatesEnabled(True)
+            self._resize_live = False
         if getattr(self, '_force_quit', False):
             self._hotkey_filter.unregister_all()
             QApplication.instance().removeNativeEventFilter(self._hotkey_filter)
@@ -461,6 +500,47 @@ class MainWindow(QMainWindow):
                 self._force_quit = False
             return
         event.ignore()
+        if self.app_state.get("pinnedToDesktop", False):
+            unpin_from_desktop(int(self.winId()))
+        self.hide()
+        self._notify_tray_once("Nudge", "Still running in tray. Right-click tray icon to quit.")
+
+    def _toggle_tray_visibility(self):
+        # Global hotkey + Qt shortcut can both fire for the same keypress;
+        # debounce so we only toggle once. Defer off the native-event stack.
+        now = time.monotonic()
+        last = getattr(self, "_tray_toggle_at", 0.0)
+        if now - last < 0.2:
+            return
+        self._tray_toggle_at = now
+        QTimer.singleShot(0, self._do_toggle_tray_visibility)
+
+    def _do_toggle_tray_visibility(self):
+        logging.info(
+            "Tray toggle: visible=%s minimized=%s pinned=%s",
+            self.isVisible(),
+            self.isMinimized(),
+            self.app_state.get("pinnedToDesktop", False),
+        )
+        if self.isVisible() and not self.isMinimized():
+            # Release desktop pin before hide — the Win32 owner/hook must not
+            # fight intentional tray hide.
+            if self.app_state.get("pinnedToDesktop", False):
+                unpin_from_desktop(int(self.winId()))
+            self.hide()
+            self._notify_tray_once("Nudge", "Still running in tray. Right-click tray icon to quit.")
+        else:
+            self.show()
+            self.showNormal()
+            self.activateWindow()
+            self.raise_()
+            self._sync_hotkey_hwnd()
+            if self.app_state.get("pinnedToDesktop", False):
+                pin_to_desktop(int(self.winId()))
+
+    def _minimize_to_tray(self):
+        if self.app_state.get("pinnedToDesktop", False):
+            unpin_from_desktop(int(self.winId()))
         self.hide()
         self._notify_tray_once("Nudge", "Still running in tray. Right-click tray icon to quit.")
 
@@ -469,6 +549,8 @@ class MainWindow(QMainWindow):
         self.showNormal()
         self.activateWindow()
         self.raise_()
+        if self.app_state.get("pinnedToDesktop", False):
+            pin_to_desktop(int(self.winId()))
 
     def _notify_tray_once(self, title: str, message: str, cooldown_ms: int = 10000):
         if getattr(self, '_tray_notified', False):
@@ -477,14 +559,67 @@ class MainWindow(QMainWindow):
         self._tray_notified = True
         QTimer.singleShot(cooldown_ms, lambda: setattr(self, '_tray_notified', False))
 
-    def _minimize_to_tray(self):
-        self.hide()
-        self._notify_tray_once("Nudge", "Still running in tray. Right-click tray icon to quit.")
-
     def _quit_from_tray(self):
         self._force_quit = True
         self._skip_close_confirm = True
         self.close()
+
+    def _tray_quick_add(self) -> None:
+        from src.frontend.tray_quick_add_dialog import TrayQuickAddDialog
+        dlg = TrayQuickAddDialog(
+            groups_data=self.groups_data,
+            group_store=self.group_store,
+            active_group_id=self._group_controller._current_input_group_id(),
+            app_state=self.app_state,
+            parent=None,
+        )
+        dlg.accepted.connect(lambda: self._on_tray_quick_add_accepted(dlg))
+        dlg.show()
+
+    def _on_tray_quick_add_accepted(self, dlg) -> None:
+        text = dlg.get_text().strip()
+        if not text:
+            return
+        group_id = dlg.get_selected_group_id()
+        idx = self.group_combo.findData(group_id)
+        if idx >= 0:
+            self.group_combo.blockSignals(True)
+            self.group_combo.setCurrentIndex(idx)
+            self.group_combo.blockSignals(False)
+        saved = self.input_bar.text()
+        self.input_bar.setText(text)
+        self._task_controller.process_input()
+        self.input_bar.setText(saved)
+        self._tray.show_message("Nudge", "Task added")
+
+    def _on_os_theme_changed(self):
+        if not self.app_state.get("followOsTheme", True):
+            return
+        # Windows broadcasts WM_THEMECHANGED before updating the registry, so
+        # defer the registry read 500ms to get the correct value.
+        QTimer.singleShot(500, self._delayed_apply_os_theme)
+
+    def _delayed_apply_os_theme(self):
+        from src.backend.state_manager import detect_os_theme
+        new_theme = detect_os_theme()
+        if new_theme == self.app_state.get("theme"):
+            return
+        self.app_state["theme"] = new_theme
+        self.state_manager.state["theme"] = new_theme
+        self.state_manager.save()
+        self.apply_app_theme()
+
+    def _on_theme_poll(self):
+        if not self.app_state.get("followOsTheme", True):
+            return
+        from src.backend.state_manager import detect_os_theme
+        detected = detect_os_theme()
+        current = self.app_state.get("theme", "dark")
+        if detected != current:
+            self.app_state["theme"] = detected
+            self.state_manager.state["theme"] = detected
+            self.state_manager.save()
+            self.apply_app_theme()
 
     def apply_app_theme(self) -> None:
         """Re-apply global QSS when theme changes."""
@@ -494,11 +629,36 @@ class MainWindow(QMainWindow):
         if app is None:
             return
         theme_id = normalize_theme_id(self.app_state.get("theme", "dark"))
+        if getattr(self, "_applied_theme_id", None) == theme_id:
+            # Still refresh open dialogs that asked for a theme echo.
+            self.theme_applied.emit(theme_id)
+            return
+        self._applied_theme_id = theme_id
         apply_theme_to_app(app, theme_id)
+        TaskRowWidget._checkbox_style_cache.clear()
         theme = get_theme(theme_id)
         chrome_color = theme["colors"].get("chrome_icon", theme["colors"]["text"])
+        if hasattr(self, '_glow_overlay'):
+            self._glow_overlay.set_theme_id(theme_id)
         if hasattr(self, 'btn_settings'):
             self.btn_settings.setIcon(QIcon(svg_to_pixmap(generate_svg_icon("settings", chrome_color, SETTINGS_ICON_SIZE), SETTINGS_ICON_SIZE)))
+        # Inline search icon on the add-task field (same amber asset as search bar)
+        if hasattr(self, '_search_action') and self._search_action is not None:
+            self._search_action.setIcon(QIcon(search_icon_pixmap(theme, 16)))
+        if hasattr(self, '_group_folder_icon') and self._group_folder_icon is not None:
+            self._group_folder_icon.setPixmap(
+                svg_to_pixmap(generate_svg_icon("folder", chrome_color, 16), 16)
+            )
+        if hasattr(self, 'btn_collapse_groups') and self.btn_collapse_groups is not None:
+            self.btn_collapse_groups.setIcon(
+                QIcon(svg_to_pixmap(generate_svg_icon("chevron_right", chrome_color, 14), 14))
+            )
+        if hasattr(self, 'btn_expand_focused') and self.btn_expand_focused is not None:
+            self.btn_expand_focused.setIcon(
+                QIcon(svg_to_pixmap(generate_svg_icon("chevron_down", chrome_color, 14), 14))
+            )
+        if hasattr(self, '_dim_overlay'):
+            self._dim_overlay.apply_theme(theme)
         # Update footer history button icon
         if hasattr(self, '_footer_history_btn'):
             self._footer_history_btn.setIcon(QIcon(svg_to_pixmap(generate_svg_icon("history", chrome_color, HISTORY_BTN_ICON_SIZE), HISTORY_BTN_ICON_SIZE)))
@@ -517,9 +677,6 @@ class MainWindow(QMainWindow):
             if b is not None:
                 b.setStyleSheet("")
         refresh_glass_shells(self, theme_id)
-        for w in app.topLevelWidgets():
-            if w is not self and w.isVisible():
-                refresh_glass_shells(w, theme_id)
         if hasattr(self, "_tray"):
             self._tray.restyle(theme)
 
@@ -527,10 +684,26 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_tag_filter"):
             self._tag_filter.update_theme(theme_id)
 
-        self._refresh_task_row_themes(theme_id)
+        # Apply theme to search bar
+        if hasattr(self, "_search_bar"):
+            self._search_bar.apply_theme(theme)
 
-        # Fix cursor visibility: set palette on all QLineEdits after stylesheet
-        self._fix_line_edit_cursors(app)
+        # Let the UI paint the new app QSS before per-row / dialog polish.
+        QApplication.processEvents()
+        self.theme_applied.emit(theme_id)
+
+        # Defer O(rows) work so settings stays responsive.
+        QTimer.singleShot(0, lambda tid=theme_id: self._finish_theme_apply(tid))
+
+    def _finish_theme_apply(self, theme_id: str) -> None:
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is not None:
+            for w in app.topLevelWidgets():
+                if w is not self and w.isVisible():
+                    refresh_glass_shells(w, theme_id)
+            self._fix_line_edit_cursors(app)
+        self._refresh_task_row_themes(theme_id)
 
     def _refresh_task_row_themes(self, theme_id: str | None = None) -> None:
         """Re-apply per-row styles that use inline colors (due dates, badges, etc.)."""
@@ -540,9 +713,14 @@ class MainWindow(QMainWindow):
             theme_id = normalize_theme_id(self.app_state.get("theme", "dark"))
         for row in self.task_row_widgets.values():
             row.update_theme(theme_id)
+        # Refresh group header chevrons (accent when expanded)
+        if hasattr(self, "group_sections"):
+            for section in self.group_sections.values():
+                if hasattr(section, "update_theme"):
+                    section.update_theme(theme_id)
         # Update priority header widgets and dividers in flat list
         theme = get_theme(theme_id)
-        divider_color = theme["colors"].get("priority_divider", "rgba(79, 195, 247, 60)")
+        divider_color = theme["colors"].get("priority_divider", "rgba(245, 166, 35, 60)")
         for i in range(self.tasks_layout.count()):
             item = self.tasks_layout.itemAt(i)
             if item is None:
@@ -558,7 +736,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, '_drop_overlay'):
             self._drop_overlay.update_theme(theme_id)
 
-    def apply_settings(self):
+    def apply_settings(self, show_window: bool = True):
         self.app_state = self.state_manager.state
         self.task_text_size = int(self.app_state.get("taskTextSize", 14))
 
@@ -568,14 +746,21 @@ class MainWindow(QMainWindow):
 
         # Apply mouse glow setting
         if hasattr(self, '_glow_overlay'):
+            self._glow_overlay.set_theme_id(
+                normalize_theme_id(self.app_state.get("theme", "dark"))
+            )
             if not self.app_state.get("mouseGlow", True):
                 self._glow_overlay.hide_glow()
 
         # Apply Opacity
         opacity = self.app_state.get("opacity", 1.0)
         self.setWindowOpacity(opacity)
-        
+
         reconcile_layer_settings(self.app_state)
+        was_visible = self.isVisible()
+        saved_geo = self.geometry() if was_visible else None
+        if was_visible:
+            self.hide()
         self.setWindowFlags(
             compose_main_window_flags(
                 self.app_state.get("pinnedToDesktop", False),
@@ -587,17 +772,28 @@ class MainWindow(QMainWindow):
         pal = self.palette()
         pal.setColor(self.backgroundRole(), Qt.GlobalColor.transparent)
         self.setPalette(pal)
-        self._reapply_dwm_shadow_disable()
-        self.show()
 
+        # Geometry must be final before the first paint. Showing first then
+        # moving (old order) left translucent DWM ghost frames on screen.
+        if saved_geo is not None:
+            self.setGeometry(saved_geo)
+        else:
+            self._restore_window_geometry()
+
+        self._reapply_dwm_shadow_disable()
+
+        # setWindowFlags recreates the HWND — rebind Win32 hotkeys + pin hook.
+        self._sync_hotkey_hwnd()
         if self.app_state.get("pinnedToDesktop", False):
             pin_to_desktop(int(self.winId()))
         else:
             unpin_from_desktop(int(self.winId()))
 
-        self._restore_window_geometry()
+        if show_window:
+            self.show()
 
         QTimer.singleShot(DEFERRED_RENDER_MS, self.render_tasks)  # FIX-A1: window restore — full render required
+        self._propagate_always_on_top()
 
     def _check_and_prompt_update(self):
         def _check():
@@ -714,6 +910,12 @@ class MainWindow(QMainWindow):
         self.setPalette(pal)
         self.setGeometry(geo)
         self.show()
+        # setWindowFlags recreates the HWND — rebind hotkeys and pin hook.
+        self._sync_hotkey_hwnd()
+        if self.app_state.get("pinnedToDesktop", False):
+            pin_to_desktop(int(self.winId()))
+        else:
+            unpin_from_desktop(int(self.winId()))
         QTimer.singleShot(DEFERRED_RENDER_MS, self._reapply_dwm_shadow_disable)
         QTimer.singleShot(RESIZE_DEBOUNCE_MS, self._sync_task_row_text_layouts)
         self._propagate_always_on_top()
@@ -758,7 +960,6 @@ class MainWindow(QMainWindow):
             self.app_state["alwaysOnTop"] = False
         self.state_manager.save()
         self._apply_window_layer()
-        self.apply_settings()
         self.setGeometry(geo)
 
     def _toggle_always_on_top_via_shortcut(self):
@@ -772,15 +973,14 @@ class MainWindow(QMainWindow):
             return
         self.run_export_dialog()
 
-    def _toggle_tray_visibility(self):
-        if self.isVisible() and not self.isMinimized():
-            self.hide()
-            self._notify_tray_once("Nudge", "Still running in tray. Right-click tray icon to quit.")
-        else:
-            self.show()
-            self.showNormal()
-            self.activateWindow()
-            self.raise_()
+    def _toggle_groups_via_shortcut(self):
+        """Toggle task groups on/off via keyboard shortcut."""
+        current = self.app_state.get("groupsEnabled", True)
+        self.app_state["groupsEnabled"] = not current
+        self.state_manager.save()
+        for w in self._group_row_widgets:
+            w.setVisible(self.app_state["groupsEnabled"])
+        self.render_tasks()
 
     def _enable_resize_hover_tracking(self, root: QWidget) -> None:
         """Show resize cursors on window edges even when the pointer is over child widgets (M1)."""
@@ -793,8 +993,24 @@ class MainWindow(QMainWindow):
 
     def showMinimized(self):
         if self.app_state.get("pinnedToDesktop", False):
+            self._pin_allow_minimize = True
             allow_next_minimize(int(self.winId()))
         super().showMinimized()
+
+    def changeEvent(self, event):
+        # Qt-level safety net: if Show Desktop minimizes us while pinned,
+        # restore immediately (Win32 hook may miss some shell paths).
+        if (
+            event.type() == QEvent.Type.WindowStateChange
+            and self.app_state.get("pinnedToDesktop", False)
+            and bool(self.windowState() & Qt.WindowState.WindowMinimized)
+        ):
+            if getattr(self, "_pin_allow_minimize", False):
+                self._pin_allow_minimize = False
+            else:
+                self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
+                pin_to_desktop(int(self.winId()))
+        super().changeEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self._frameless_chrome is not None:
@@ -820,7 +1036,10 @@ class MainWindow(QMainWindow):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self._frameless_chrome is not None:
+            was_resizing = self._frameless_chrome.is_resizing
             if self._frameless_chrome.handle_mouse_release():
+                if was_resizing:
+                    self._on_resize_settled()
                 self._persist_window_geometry()
                 event.accept()
                 return
@@ -877,14 +1096,8 @@ class MainWindow(QMainWindow):
         act_whatsnew = self._overflow_menu.addAction("What\u2019s New")
         act_whatsnew.triggered.connect(self._show_whats_new)
 
-        self.btn_menu = QPushButton("\u00b7\u00b7\u00b7")
-        self.btn_menu.setObjectName("chromeButton")
-        self.btn_menu.setFixedSize(chrome_btn_sz, chrome_btn_sz)
-        self.btn_menu.setToolTip("More")
-        self.btn_menu.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_menu.clicked.connect(self._show_overflow_menu)
-        top_bar.addWidget(self.btn_menu)
-
+        # Title bar order: Nudge — Settings — ··· — minimize — close
+        # Search lives inline on the Add-tasks field (not in the title bar).
         self.btn_settings = QPushButton()
         self.btn_settings.setObjectName("chromeButton")
         self.btn_settings.setIcon(QIcon(svg_to_pixmap(generate_svg_icon("settings", chrome_color, SETTINGS_ICON_SIZE), SETTINGS_ICON_SIZE)))
@@ -894,6 +1107,16 @@ class MainWindow(QMainWindow):
         self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_settings.clicked.connect(self.open_settings)
         top_bar.addWidget(self.btn_settings)
+
+        self.btn_menu = QPushButton("\u00b7\u00b7\u00b7")
+        self.btn_menu.setObjectName("chromeButton")
+        self.btn_menu.setFixedSize(chrome_btn_sz, chrome_btn_sz)
+        self.btn_menu.setToolTip("More")
+        self.btn_menu.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_menu.clicked.connect(self._show_overflow_menu)
+        top_bar.addWidget(self.btn_menu)
+
+        self.btn_search = None  # search is inline on the add-task field
 
         self.btn_minimize = QPushButton("-")
         self.btn_minimize.setObjectName("chromeButton")
@@ -918,10 +1141,14 @@ class MainWindow(QMainWindow):
         # --- Group selector + new tasks input ---
         self._group_row_widgets: list[QWidget] = []
         group_row = QHBoxLayout()
-        group_label = QLabel("Group:")
-        set_label_point_size(group_label, 12, bold=True)
-        group_row.addWidget(group_label)
-        self._group_row_widgets.append(group_label)
+        self._group_folder_icon = QLabel()
+        self._group_folder_icon.setFixedSize(18, 18)
+        self._group_folder_icon.setPixmap(
+            svg_to_pixmap(generate_svg_icon("folder", chrome_color, 16), 16)
+        )
+        self._group_folder_icon.setToolTip("Task group")
+        group_row.addWidget(self._group_folder_icon)
+        self._group_row_widgets.append(self._group_folder_icon)
 
         self.group_combo = QComboBox(self)
         self.group_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -936,6 +1163,31 @@ class MainWindow(QMainWindow):
         self.btn_add_group.clicked.connect(self._add_group_dialog)
         group_row.addWidget(self.btn_add_group)
         self._group_row_widgets.append(self.btn_add_group)
+
+        self.btn_collapse_groups = QPushButton()
+        self.btn_collapse_groups.setObjectName("chromeButton")
+        self.btn_collapse_groups.setFixedSize(28, 28)
+        self.btn_collapse_groups.setToolTip("Collapse all groups")
+        self.btn_collapse_groups.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_collapse_groups.setIcon(
+            QIcon(svg_to_pixmap(generate_svg_icon("chevron_right", chrome_color, 14), 14))
+        )
+        self.btn_collapse_groups.clicked.connect(self._collapse_all_groups)
+        group_row.addWidget(self.btn_collapse_groups)
+        self._group_row_widgets.append(self.btn_collapse_groups)
+
+        self.btn_expand_focused = QPushButton()
+        self.btn_expand_focused.setObjectName("chromeButton")
+        self.btn_expand_focused.setFixedSize(28, 28)
+        self.btn_expand_focused.setToolTip("Expand focused group only")
+        self.btn_expand_focused.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_expand_focused.setIcon(
+            QIcon(svg_to_pixmap(generate_svg_icon("chevron_down", chrome_color, 14), 14))
+        )
+        self.btn_expand_focused.clicked.connect(self._expand_focused_group)
+        group_row.addWidget(self.btn_expand_focused)
+        self._group_row_widgets.append(self.btn_expand_focused)
+
         layout.addLayout(group_row)
 
         self.input_bar = QLineEdit(self)
@@ -943,6 +1195,11 @@ class MainWindow(QMainWindow):
         self.input_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.input_bar.returnPressed.connect(self.process_input)
         self.input_bar.setDragEnabled(True)
+        self._search_action = QAction(self.input_bar)
+        self._search_action.setToolTip("Search (Ctrl+F)")
+        self._search_action.setIcon(QIcon(search_icon_pixmap(theme, 16)))
+        self._search_action.triggered.connect(self._toggle_search)
+        self.input_bar.addAction(self._search_action, QLineEdit.ActionPosition.TrailingPosition)
         layout.addWidget(self.input_bar)
 
         self.input_bar.installEventFilter(self)
@@ -954,7 +1211,16 @@ class MainWindow(QMainWindow):
         self._tag_filter.tags_selected.connect(self._on_tag_filter_changed)
         self._active_tag_filter: list[str] = []
         layout.addWidget(self._tag_filter)
-        
+
+        # --- Task search bar (hidden by default) ---
+        self._search_bar = TaskSearchBar(self)
+        self._search_bar.search_changed.connect(self._on_search_changed)
+        self._search_bar.filters_changed.connect(self._on_search_filters_changed)
+        self._search_bar.close_requested.connect(self._close_search)
+        self._active_search_text = ""
+        self._active_search_scopes = {"tasks", "groups", "tags"}
+        layout.addWidget(self._search_bar)
+
         # --- Task Checklist Layout ---
         # Scroll area for tasks
         self.scroll_area = QScrollArea(self)
@@ -966,6 +1232,7 @@ class MainWindow(QMainWindow):
         self.tasks_widget.setObjectName("transparentSurface")
         self.tasks_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.tasks_widget.setAcceptDrops(True)
+        self._search_bar.set_safe_parent(self.tasks_widget)
         self.tasks_layout = QVBoxLayout(self.tasks_widget)
         self.tasks_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.tasks_layout.setSpacing(TASKS_LAYOUT_SPACING)
@@ -982,6 +1249,15 @@ class MainWindow(QMainWindow):
 
         self.scroll_area.setWidget(self.tasks_widget)
         layout.addWidget(self.scroll_area, stretch=1)
+
+        # Sticky group header clone (pinned while scrolling dense lists)
+        self._sticky_group_header = QPushButton(self.scroll_area.viewport())
+        self._sticky_group_header.setObjectName("groupHeader")
+        self._sticky_group_header.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._sticky_group_header.hide()
+        self._sticky_group_header.clicked.connect(self._on_sticky_header_clicked)
+        self._sticky_section_id = None
+        self.scroll_area.verticalScrollBar().valueChanged.connect(self._update_sticky_group_header)
 
         self._glow_overlay = GlowOverlay(self.scroll_area.viewport())
         self._glow_overlay.setGeometry(self.scroll_area.viewport().rect())
@@ -1012,6 +1288,10 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self._empty_state_widget)
         self._empty_state_widget.hide()
+
+        # --- Search shortcut ---
+        self._search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        self._search_shortcut.activated.connect(self._toggle_search)
 
         # --- Separator ---
         self._footer_separator = QFrame()
@@ -1048,6 +1328,8 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(*CENTRAL_WIDGET_MARGINS)
 
         self.setCentralWidget(central_widget)
+        self._dim_overlay = DimOverlay(central_widget)
+        self._dim_overlay.apply_theme(theme)
         self._enable_resize_hover_tracking(central_widget)
         # Let the glass panel and task list grow when the user resizes the window.
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -1081,17 +1363,51 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self._sync_task_list_viewport_width()
         if hasattr(self, '_glow_overlay') and self.scroll_area is not None:
             self._glow_overlay.setGeometry(self.scroll_area.viewport().rect())
         if hasattr(self, '_drop_overlay') and self.scroll_area is not None:
             self._drop_overlay.setGeometry(self.scroll_area.viewport().rect())
+        if not self._resize_live:
+            self._begin_live_resize()
         if self._resize_timer.isActive():
             self._resize_timer.stop()
-        self._resize_timer.start(100)
+        self._resize_timer.start(RESIZE_DEBOUNCE_MS)
+
+    def _begin_live_resize(self) -> None:
+        """Pause expensive task-list work while the user drags a resize edge."""
+        self._resize_live = True
+        if self.tasks_widget is not None:
+            self.tasks_widget.setUpdatesEnabled(False)
+
+    def _on_resize_settled(self) -> None:
+        """Re-enable painting and sync wrapping layouts once geometry is stable."""
+        self._resize_timer.stop()
+        if self.tasks_widget is not None:
+            self.tasks_widget.setUpdatesEnabled(True)
+        was_live = self._resize_live
+        self._resize_live = False
+        self._sync_task_row_text_layouts()
+        if was_live and self.tasks_widget is not None:
+            self.tasks_widget.update()
+
+    def _sync_hotkey_hwnd(self):
+        """Re-bind RegisterHotKey to the current native window handle.
+
+        ``setWindowFlags`` destroys/recreates the HWND; hotkeys registered
+        against the old handle stop working until moved.
+        """
+        try:
+            self._hotkey_filter.set_hwnd(int(self.winId()))
+        except Exception:
+            logging.exception("Failed to sync hotkey HWND")
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._sync_hotkey_hwnd()
+        if not self._hotkey_registered_on_show:
+            self._hotkey_registered_on_show = True
+            self._shortcut_manager.update_shortcuts()
+            self._sync_hotkey_hwnd()
         QTimer.singleShot(DEFERRED_RENDER_MS, self._reapply_dwm_shadow_disable)
         self._sync_task_list_viewport_width()
         self._sync_task_row_text_layouts()
@@ -1121,14 +1437,21 @@ class MainWindow(QMainWindow):
 
     def _sync_task_row_text_layouts(self):
         self._sync_task_list_viewport_width()
-        if self.tasks_layout is not None:
-            self.tasks_layout.activate()
-        for section in self.group_sections.values():
-            if hasattr(section, "force_layout"):
-                section.force_layout()
-        for row in self.task_row_widgets.values():
-            if hasattr(row, "sync_text_layout"):
-                row.sync_text_layout()
+        host = self.tasks_widget
+        if host is not None:
+            host.setUpdatesEnabled(False)
+        try:
+            if self.tasks_layout is not None:
+                self.tasks_layout.activate()
+            for section in self.group_sections.values():
+                if hasattr(section, "force_layout"):
+                    section.force_layout()
+            for row in self.task_row_widgets.values():
+                if hasattr(row, "sync_text_layout"):
+                    row.sync_text_layout()
+        finally:
+            if host is not None:
+                host.setUpdatesEnabled(True)
 
     def init_keyboard_shortcuts(self):
         self._shortcut_manager.register_all()
@@ -1293,6 +1616,61 @@ class MainWindow(QMainWindow):
     def _add_group_dialog(self) -> None:
         self._group_controller._add_group_dialog()
 
+    def _collapse_all_groups(self) -> None:
+        for section in self.group_sections.values():
+            section.set_content_expanded(False, persist=True)
+        self._update_sticky_group_header()
+
+    def _expand_focused_group(self) -> None:
+        """Collapse all groups except the one selected in the combo (or first)."""
+        focus_id = None
+        if hasattr(self, "group_combo") and self.group_combo.count():
+            focus_id = self.group_combo.currentData()
+        if not focus_id and self.group_sections:
+            focus_id = next(iter(self.group_sections))
+        for gid, section in self.group_sections.items():
+            section.set_content_expanded(gid == focus_id, persist=True)
+        self._update_sticky_group_header()
+
+    def _on_sticky_header_clicked(self) -> None:
+        gid = self._sticky_section_id
+        if gid and gid in self.group_sections:
+            section = self.group_sections[gid]
+            section.set_content_expanded(not section._expanded, persist=True)
+            self._update_sticky_group_header()
+
+    def _update_sticky_group_header(self, *_args) -> None:
+        if not hasattr(self, "_sticky_group_header"):
+            return
+        groups_enabled = self.app_state.get("groupsEnabled", DEFAULT_GROUPS_ENABLED)
+        if not groups_enabled or not self.group_sections:
+            self._sticky_group_header.hide()
+            self._sticky_section_id = None
+            return
+        vp = self.scroll_area.viewport()
+        sticky = None
+        for section in self.group_sections.values():
+            if section.isHidden():
+                continue
+            top_left = section.mapTo(vp, QPoint(0, 0))
+            # Section scrolled up but still intersecting viewport
+            if top_left.y() < 0 and top_left.y() + section.height() > 28:
+                sticky = section
+                break
+        if sticky is None:
+            self._sticky_group_header.hide()
+            self._sticky_section_id = None
+            return
+        self._sticky_section_id = sticky.group_id
+        self._sticky_group_header.setText(sticky.header_btn.text())
+        self._sticky_group_header.setIcon(sticky.header_btn.icon())
+        self._sticky_group_header.setIconSize(sticky.header_btn.iconSize())
+        w = vp.width()
+        h = max(32, sticky.header_btn.sizeHint().height())
+        self._sticky_group_header.setGeometry(0, 0, w, h)
+        self._sticky_group_header.raise_()
+        self._sticky_group_header.show()
+
     def _rename_group(self, group_id: str) -> None:
         self._group_controller._rename_group(group_id)
 
@@ -1318,33 +1696,151 @@ class MainWindow(QMainWindow):
         for w in self._group_row_widgets:
             w.setVisible(groups_enabled)
         self._task_controller.render_tasks()
+        QTimer.singleShot(0, self._update_sticky_group_header)
 
     def _on_tag_filter_changed(self, tags: list[str]):
         """Handle tag filter selection change."""
         self._active_tag_filter = tags
-        self._apply_tag_filter()
+        self._apply_task_visibility_filters()
 
-    def _task_matches_filter(self, task: dict) -> bool:
+    def _task_matches_tag_filter(self, task: dict) -> bool:
         """Check if a task matches the current tag filter."""
         if not self._active_tag_filter:
             return True
         task_tags = task.get("tags", [])
         return any(tag in task_tags for tag in self._active_tag_filter)
 
+    def _task_text_matches_search(self, task: dict) -> bool:
+        query = (self._active_search_text or "").strip().lower()
+        if not query:
+            return False
+        return query in task.get("text", "").lower()
+
+    def _task_tag_matches_search(self, task: dict) -> bool:
+        query = (self._active_search_text or "").strip().lower()
+        if not query:
+            return False
+        return any(query in tag.lower() for tag in task.get("tags", []))
+
+    def _task_matches_search(self, task: dict) -> bool:
+        """Task matches if text/tags hit and the matching scope chip is active."""
+        query = (self._active_search_text or "").strip().lower()
+        if not query:
+            return True
+        scopes = getattr(self, "_active_search_scopes", {"tasks", "groups", "tags"})
+        text_hit = self._task_text_matches_search(task)
+        tag_hit = self._task_tag_matches_search(task)
+        if text_hit and "tasks" in scopes:
+            return True
+        if tag_hit and "tags" in scopes:
+            return True
+        return False
+
+    def _group_matches_search(self, group: dict) -> bool:
+        query = (self._active_search_text or "").strip().lower()
+        if not query:
+            return False
+        if "groups" not in getattr(self, "_active_search_scopes", {"groups"}):
+            return False
+        return query in group.get("name", "").lower()
+
+    def _task_is_visible(self, task: dict) -> bool:
+        return self._task_matches_tag_filter(task) and self._task_matches_search(task)
+
     def _apply_tag_filter(self):
-        """Show/hide task rows based on active tag filter."""
-        for task_id, row in self.task_row_widgets.items():
-            task = row._task_ref
-            if task:
-                visible = self._task_matches_filter(task)
-                row.setVisible(visible)
-        # Update group section visibility
+        """Show/hide task rows based on active tag + search filters."""
+        self._apply_task_visibility_filters()
+
+    def _apply_task_visibility_filters(self):
+        """Apply tag filter and search together with scope chips + type labels."""
+        searching = bool((self._active_search_text or "").strip())
+        query = (self._active_search_text or "").strip()
+        has_results = False
+
+        for _key, row in self.task_row_widgets.items():
+            task = getattr(row, "_task_ref", None)
+            if task is None:
+                row.setVisible(False)
+                continue
+            visible = self._task_is_visible(task)
+            row.setVisible(visible)
+            if visible and searching:
+                has_results = True
+                kind = "tag" if (
+                    self._task_tag_matches_search(task)
+                    and not self._task_text_matches_search(task)
+                ) else "task"
+                if hasattr(row, "apply_search_highlight"):
+                    row.apply_search_highlight(query, match_kind=kind)
+            elif hasattr(row, "apply_search_highlight"):
+                row.apply_search_highlight("")
+
         for group_id, section in self.group_sections.items():
-            visible_tasks = sum(
-                1 for t in self.tasks
-                if t.get("groupId") == group_id and self._task_matches_filter(t)
+            group_hit = searching and self._group_matches_search(section.group)
+            visible_count = 0
+            for row in section.task_rows:
+                task = getattr(row, "_task_ref", None)
+                if task is not None and self._task_is_visible(task):
+                    visible_count += 1
+
+            if visible_count == 0 and not group_hit:
+                section.setVisible(False)
+                if hasattr(section, "set_search_type_label"):
+                    section.set_search_type_label(False)
+                continue
+
+            section.setVisible(True)
+            has_results = True
+            if hasattr(section, "set_search_type_label"):
+                section.set_search_type_label(group_hit)
+            if searching:
+                section.set_content_expanded(True, persist=False)
+            else:
+                section.set_content_expanded(
+                    bool(section.group.get("expanded", True)),
+                    persist=False,
+                )
+            section.refresh_header_count(
+                visible_count if searching or self._active_tag_filter else None
             )
-            section.setVisible(visible_tasks > 0)
+
+        if hasattr(self, "_search_bar"):
+            self._search_bar.set_has_results(has_results if searching else False)
+
+    # --- Search bar methods ---
+
+    def _toggle_search(self):
+        # Clicking the search action while open should close. Suppress the
+        # FocusOut→close race that would hide the bar then immediately reopen it.
+        if self._search_bar.isVisible():
+            self._search_bar.suppress_next_focus_close()
+            self._close_search()
+            return
+        # If FocusOut already closed us within this click, don't reopen.
+        closed_at = getattr(self, "_search_closed_at", 0.0)
+        if closed_at and (time.monotonic() - closed_at) < 0.3:
+            return
+        self._open_search()
+
+    def _open_search(self):
+        self._search_closed_at = 0.0
+        self._active_search_scopes = {"tasks", "groups", "tags"}
+        self._search_bar.activate()
+
+    def _close_search(self):
+        self._search_closed_at = time.monotonic()
+        self._search_bar.deactivate()
+
+    def _on_search_changed(self, text: str):
+        self._active_search_text = text
+        self._apply_task_visibility_filters()
+
+    def _on_search_filters_changed(self, scopes: set):
+        self._active_search_scopes = set(scopes) if scopes else {"tasks", "groups", "tags"}
+        self._apply_task_visibility_filters()
+
+    def _apply_search_filter(self):
+        self._apply_task_visibility_filters()
 
     def _update_tag_filter(self):
         """Update the tag filter dropdown with current tags."""
@@ -1491,8 +1987,8 @@ class MainWindow(QMainWindow):
         )
         self._dialog_manager._history_dialog = dialog
         self._task_ctx.history_dialog = dialog
-        avoid = self._window_rects_to_avoid()
-        self._place_dialog_avoiding_rects(dialog, avoid)
+        self.theme_applied.connect(dialog._on_parent_theme_applied)
+        self._dialog_manager.center_on_parent(dialog)
         self._run_side_dialog(dialog)
 
     def open_reminders(self) -> None:
@@ -1531,8 +2027,8 @@ class MainWindow(QMainWindow):
             return
         dialog = SettingsDialog(self.state_manager, self)
         self._dialog_manager._settings_dialog = dialog
-        avoid = self._window_rects_to_avoid()
-        self._place_dialog_avoiding_rects(dialog, avoid)
+        self.theme_applied.connect(dialog._on_parent_theme_applied)
+        self._dialog_manager.center_on_parent(dialog)
         self._run_side_dialog(dialog)
 
     def _on_timer_fired(self, timer_id: str, name: str):
