@@ -103,5 +103,5 @@ net_master_plan.md
 docs/
 
 # ─── Dev scripts (not part of the app) ─────────────────────────────────────
-dev.py
-scripts/
+scripts/*
+!scripts/test_update.py
