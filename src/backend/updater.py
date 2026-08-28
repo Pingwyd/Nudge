@@ -426,6 +426,24 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
         "  \u2022 No ghost window frames at startup\n"
         "  \u2022 Group search filters tasks in-place per group"
     ),
+    "2.0.2": (
+        "\ud83d\udce6 Release\n"
+        "  \u2022 Complete build shipping all 2.0.1 features and fixes\n"
+        "  \u2022 Replaces the incomplete v2.0.1 release tag\n"
+        "\n"
+        "\u2728 New Features\n"
+        "  \u2022 Task search bar \u2014 Ctrl+F with scope filters\n"
+        "  \u2022 Tray quick-add from the system tray menu\n"
+        "  \u2022 Dim overlay for search and modal focus\n"
+        "\n"
+        "\ud83d\udce6 Improvements\n"
+        "  \u2022 Faster theme and settings changes\n"
+        "  \u2022 Smoother window resize\n"
+        "  \u2022 Debounced disk writes\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Pin to desktop, hotkeys, flat-view boot, ghost frames, group search"
+    ),
 }
 
 

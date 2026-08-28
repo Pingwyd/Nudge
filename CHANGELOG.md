@@ -5,6 +5,13 @@ All notable changes to Nudge are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - 2026-08-28
+
+### Fixed
+- **Release packaging** — v2.0.1 tag pointed to an incomplete commit; 2.0.2 ships the full feature set below on `main`.
+
+Includes everything listed in 2.0.1: task search, tray quick-add, debounced saves, pin/hotkey fixes, flat-view boot fix, ghost-frame fix, group search filtering, theme/settings and resize performance improvements.
+
 ## [2.0.1] - 2026-08-28
 
 ### Added
