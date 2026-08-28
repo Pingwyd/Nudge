@@ -5,6 +5,27 @@ All notable changes to Nudge are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-08-28
+
+### Added
+- **Task search bar** — Ctrl+F opens an inline search bar with scope filters (tasks, groups, tags).
+- **Tray quick-add** — add tasks quickly from the system tray context menu.
+- **Dim overlay** — subtle backdrop when search or modal flows are active.
+- **Debounced persistence** — batches rapid disk writes for tasks, groups, and app state.
+
+### Changed
+- **Theme/settings performance** — faster live theme and text-size changes without full UI freezes.
+- **Resize performance** — smoother window resizing by deferring per-row text reflow until the drag ends.
+- **Task row pooling** — reuses row widgets across renders to reduce startup and re-render cost.
+
+### Fixed
+- **Pin to desktop** — survives Win+D / Show Desktop and HWND recreation after layer changes.
+- **Global hotkeys** — tray toggle shortcut rebinds correctly after `setWindowFlags`.
+- **Flat view boot** — tasks visible immediately when groups are disabled on launch.
+- **Startup ghost frames** — no stray window outlines during first paint.
+- **Group search** — with groups enabled, search shows only matching tasks inside each group.
+- **Single instance** — second launch prints a clear message when Nudge is already running.
+
 ## [2.0.0] - 2026-07-02
 
 ### Added

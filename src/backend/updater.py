@@ -408,6 +408,24 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
         "  \u2022 Confirmation dialog buttons no longer clipped\n"
         "  \u2022 Group dropdown populates correctly on restart"
     ),
+    "2.0.1": (
+        "\u2728 New Features\n"
+        "  \u2022 Task search bar \u2014 Ctrl+F with scope filters for tasks, groups, and tags\n"
+        "  \u2022 Tray quick-add \u2014 add tasks from the system tray menu\n"
+        "  \u2022 Dim overlay for search and modal focus states\n"
+        "\n"
+        "\ud83d\udce6 Improvements\n"
+        "  \u2022 Faster theme and settings appearance changes\n"
+        "  \u2022 Smoother window resize (deferred text reflow)\n"
+        "  \u2022 Debounced disk writes for tasks and app state\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Pin to desktop survives Win+D and HWND recreation\n"
+        "  \u2022 Tray toggle hotkey works after layer changes\n"
+        "  \u2022 Flat view shows tasks on first boot\n"
+        "  \u2022 No ghost window frames at startup\n"
+        "  \u2022 Group search filters tasks in-place per group"
+    ),
 }
 
 
