@@ -1,21 +1,83 @@
 import json
 import logging
-import os
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
-import threading
-from dataclasses import dataclass, field
+import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
-from urllib.error import URLError, HTTPError
 
 from src.os_layer.platform_utils import is_windows, is_macos, is_linux
 
 DEFAULT_CHECK_URL = "https://api.github.com/repos/Pingwyd/Nudge/releases/latest"
 DEFAULT_DOWNLOAD_BASE = "https://github.com/Pingwyd/Nudge/releases/latest/download"
+GITHUB_REPO = "Pingwyd/Nudge"
+GITHUB_RELEASES_LATEST_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
+
+# Placeholder URLs from early builds/docs that were persisted in appstate.json.
+_STALE_UPDATE_URL_MARKERS = (
+    "/repos/user/",
+    "/user/nudge",
+    "your-org",
+    "your-repo",
+    "example.com",
+)
+
+
+def normalize_update_check_url(url: Optional[str]) -> str:
+    """Return a usable GitHub releases API URL, replacing known bad placeholders."""
+    if not url or not str(url).strip():
+        return DEFAULT_CHECK_URL
+    cleaned = str(url).strip()
+    lowered = cleaned.lower()
+    if not lowered.startswith("https://api.github.com/repos/"):
+        return DEFAULT_CHECK_URL
+    if any(marker in lowered for marker in _STALE_UPDATE_URL_MARKERS):
+        return DEFAULT_CHECK_URL
+    return cleaned
+
+
+def _bare_version(version: str) -> str:
+    return version.lstrip("vV")
+
+
+def _release_tag(version: str) -> str:
+    return f"v{_bare_version(version)}"
+
+
+def _version_from_release_page_url(url: str) -> str:
+    from urllib.parse import urlparse
+
+    path = urlparse(url).path
+    if "/tag/" in path:
+        return _bare_version(path.rsplit("/tag/", 1)[-1])
+    return ""
+
+
+def build_platform_download_url(version: str) -> tuple[str, str]:
+    """Build a predictable release asset URL (no GitHub API needed)."""
+    bare = _bare_version(version)
+    tag = _release_tag(bare)
+    base = f"https://github.com/{GITHUB_REPO}/releases/download/{tag}"
+    if is_windows():
+        return f"{base}/Nudge-{bare}-windows.zip", "zip"
+    if is_macos():
+        return f"{base}/Nudge-{bare}.dmg", "dmg"
+    if is_linux():
+        return f"{base}/Nudge-{bare}.AppImage", "appimage"
+    return "", ""
+
+
+def _is_github_rate_limit_error(message: str) -> bool:
+    lowered = message.lower()
+    return "403" in message and (
+        "rate limit" in lowered
+        or "forbidden" in lowered
+        or "status code 403" in lowered
+    )
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -23,138 +85,38 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
-_ssl_context = None
-
-def _get_ssl_context():
-    global _ssl_context
-    if _ssl_context is not None:
-        return _ssl_context
-    try:
-        import ssl
-        try:
-            import certifi
-            _ssl_context = ssl.create_default_context(cafile=certifi.where())
-            logging.debug("SSL context using certifi CA: %s", certifi.where())
-        except Exception:
-            _ssl_context = ssl.create_default_context()
-            logging.debug("SSL context using system default CA store")
-    except Exception:
-        _ssl_context = None
-    return _ssl_context
-
-def _fetch_url(url, headers, timeout=10):
-    """Fetch a URL, returning response bytes.
-
-    Uses Python's ssl/urllib when available; falls back to PowerShell
-    Invoke-WebRequest when the _ssl C extension DLL cannot load in a
-    frozen PyInstaller EXE.
-    """
-    ctx = _get_ssl_context()
-    if ctx is not None:
-        from urllib.request import Request, urlopen
-        req = Request(url, headers=headers)
-        with urlopen(req, timeout=timeout, context=ctx) as resp:
-            return resp.read()
-    return _ps_fetch(url, headers, timeout)
-
-def _ps_fetch(url, headers, timeout):
-    """Fallback HTTPS GET via PowerShell — Windows only."""
-    if not is_windows():
-        raise RuntimeError("PowerShell fallback is Windows-only")
-    hdr = "@{" + ";".join(f'"{k}"="{v}"' for k, v in headers.items()) + "}"
-    ps = (
-        "$r = Invoke-WebRequest -Uri '{}' -Headers {} -TimeoutSec {} -UseBasicParsing;"
-        "$b = [System.Text.Encoding]::UTF8.GetBytes($r.Content);"
-        "$s = [System.Console]::OpenStandardOutput();"
-        "$s.Write($b, 0, $b.Length); $s.Close()"
-    ).format(url.replace("'", "''"), hdr, timeout)
-    _ps_flags = subprocess.CREATE_NO_WINDOW
-    result = subprocess.run(
-        ["powershell", "-NoProfile", "-Command", ps],
-        capture_output=True, timeout=timeout + 5, creationflags=_ps_flags,
-    )
-    if result.returncode != 0:
-        err = result.stderr.decode("utf-8", errors="replace").strip()
-        raise RuntimeError(err or "PowerShell request failed")
-    return result.stdout
-
-
-def _ps_download(url, dest_path, timeout=120, progress_callback=None):
-    """Fallback file download via PowerShell — Windows only.
-
-    Streams the download and reports progress via stdout lines (bytes downloaded).
-    """
-    if not is_windows():
-        raise RuntimeError("PowerShell download fallback is Windows-only")
-    ps_script = f"""
-Add-Type -AssemblyName System.Net.Http
-$url = '{url.replace("'", "''")}'
-$dest = '{str(dest_path).replace("'", "''")}'
-try {{
-    $handler = [System.Net.Http.HttpClientHandler]::new()
-    $client = [System.Net.Http.HttpClient]::new($handler)
-    $client.Timeout = [TimeSpan]::FromSeconds({timeout})
-    $client.DefaultRequestHeaders.Add('User-Agent', 'Nudge/1.0')
-    $response = $client.GetAsync($url, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).Result
-    $response.EnsureSuccessStatusCode()
-    $total = $response.Content.Headers.ContentLength
-    if ($null -eq $total) {{ $total = 0 }}
-    $stream = $response.Content.ReadAsStreamAsync().Result
-    $fileStream = [System.IO.File]::Create($dest)
-    $buffer = New-Object byte[] 65536
-    $downloaded = 0
-    while ({{ $read = $stream.Read($buffer, 0, $buffer.Length); $read -gt 0 }}) {{
-        $fileStream.Write($buffer, 0, $read)
-        $downloaded += $read
-        Write-Output "$downloaded/$total"
-    }}
-    $fileStream.Close()
-    $stream.Close()
-    $client.Dispose()
-}} catch {{
-    Write-Error $_.Exception.Message
-    exit 1
-}}
-"""
-    _ps_flags = subprocess.CREATE_NO_WINDOW
-    proc = subprocess.Popen(
-        ["powershell", "-NoProfile", "-Command", ps_script],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        creationflags=_ps_flags,
-    )
-    try:
-        for raw_line in iter(proc.stdout.readline, b""):
-            line = raw_line.decode("utf-8", errors="replace").strip()
-            if "/" in line and progress_callback:
-                try:
-                    parts = line.split("/", 1)
-                    dl = int(parts[0])
-                    total = int(parts[1]) if parts[1] else 0
-                    progress_callback(dl, total)
-                except (ValueError, IndexError):
-                    pass
-        proc.wait(timeout=timeout + 30)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait()
-        raise RuntimeError("PowerShell download timed out")
-    if proc.returncode != 0:
-        err = proc.stderr.read().decode("utf-8", errors="replace").strip()
-        raise RuntimeError(err or "PowerShell download failed")
-    if not dest_path.exists():
-        raise RuntimeError("PowerShell download created no output file")
-
-
 _PLATFORM_EXT = ".exe" if is_windows() else ".dmg" if is_macos() else ".AppImage"
 
 
-def select_platform_asset(assets: list[dict]) -> str:
-    """Pick the correct platform installer asset from a release asset list."""
-    ext = _PLATFORM_EXT
-    candidates = [a for a in assets if a.get("name", "").endswith(ext)]
-    if candidates:
-        return candidates[0].get("browser_download_url", "")
-    return ""
+def select_platform_asset(assets: list[dict]) -> tuple[str, str]:
+    """Pick the correct platform asset. Returns (download_url, asset_kind)."""
+    if is_windows():
+        for asset in assets:
+            name = asset.get("name", "")
+            if name.endswith("-windows.zip"):
+                return asset.get("browser_download_url", ""), "zip"
+        for asset in assets:
+            name = asset.get("name", "")
+            if name.startswith("Nudge-Setup-") and name.endswith(".exe"):
+                return asset.get("browser_download_url", ""), "installer"
+        for asset in assets:
+            if asset.get("name", "").endswith(".exe"):
+                return asset.get("browser_download_url", ""), "installer"
+        return "", ""
+
+    if is_macos():
+        for asset in assets:
+            if asset.get("name", "").endswith(".dmg"):
+                return asset.get("browser_download_url", ""), "dmg"
+        return "", ""
+
+    if is_linux():
+        for asset in assets:
+            if asset.get("name", "").endswith(".AppImage"):
+                return asset.get("browser_download_url", ""), "appimage"
+        return "", ""
+
+    return "", ""
 
 
 @dataclass
@@ -162,6 +124,7 @@ class UpdateCheckResult:
     available: bool = False
     latest_version: str = ""
     download_url: str = ""
+    asset_kind: str = ""
     changelog: str = ""
     error: str = ""
     release_id: int = 0
@@ -444,6 +407,16 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
         "\ud83d\udc1b Bug Fixes\n"
         "  \u2022 Pin to desktop, hotkeys, flat-view boot, ghost frames, group search"
     ),
+    "2.0.3": (
+        "\ud83d\udce6 Improvements\n"
+        "  \u2022 Update check and download use Qt networking (more reliable on Windows)\n"
+        "  \u2022 Windows in-place updates extract the release zip instead of overwriting the exe\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Fixed empty or invalid GitHub API responses crashing the update check\n"
+        "  \u2022 Fixed update dialog crash (missing FONT_SIZE_BODY import)\n"
+        "  \u2022 Fixed Windows update installing the wrong file type"
+    ),
 }
 
 
@@ -470,18 +443,13 @@ def _parse_version(version_str: str) -> tuple:
     return tuple(parts[:3])
 
 
-def check_for_update(
-    current_version: str,
-    check_url: Optional[str] = None,
-    timeout: int = 10,
-) -> Optional[UpdateCheckResult]:
-    url = check_url or DEFAULT_CHECK_URL
+def check_for_update_from_body(body: bytes, current_version: str) -> UpdateCheckResult:
+    if not body or not body.strip():
+        return UpdateCheckResult(error="Empty response from update server")
     try:
-        body = _fetch_url(url, {"Accept": "application/json", "User-Agent": "Nudge/1.0"}, timeout)
         data = json.loads(body.decode("utf-8"))
-    except Exception as exc:
-        logging.error("Update check failed: %s: %s", type(exc).__name__, exc)
-        return UpdateCheckResult(error=f"{type(exc).__name__}: {exc}")
+    except json.JSONDecodeError as exc:
+        return UpdateCheckResult(error=f"Invalid update response: {exc}")
 
     tag = data.get("tag_name", "")
     latest = _parse_version(tag)
@@ -492,9 +460,10 @@ def check_for_update(
         return UpdateCheckResult(available=False, release_id=release_id)
 
     download_url = ""
+    asset_kind = ""
     assets = data.get("assets", [])
     if assets:
-        download_url = select_platform_asset(assets)
+        download_url, asset_kind = select_platform_asset(assets)
     if not download_url:
         download_url = data.get("html_url", "")
 
@@ -502,9 +471,91 @@ def check_for_update(
         available=True,
         latest_version=tag.lstrip("vV"),
         download_url=download_url,
+        asset_kind=asset_kind,
         changelog=data.get("body", ""),
         release_id=release_id,
     )
+
+
+def check_for_update_from_redirect(
+    final_url: str,
+    current_version: str,
+) -> UpdateCheckResult:
+    """Resolve latest version from /releases/latest redirect (no API quota)."""
+    latest_version = _version_from_release_page_url(final_url)
+    if not latest_version:
+        return UpdateCheckResult(
+            error=f"Could not parse release version from {final_url}",
+        )
+
+    latest = _parse_version(latest_version)
+    current = _parse_version(current_version)
+    if latest <= current:
+        return UpdateCheckResult(available=False)
+
+    download_url, asset_kind = build_platform_download_url(latest_version)
+    if not download_url:
+        return UpdateCheckResult(error="No download URL for this platform")
+
+    return UpdateCheckResult(
+        available=True,
+        latest_version=latest_version,
+        download_url=download_url,
+        asset_kind=asset_kind,
+        changelog=FRIENDLY_CHANGELOGS.get(latest_version, ""),
+    )
+
+
+def check_for_update(
+    current_version: str,
+    check_url: Optional[str] = None,
+    timeout: int = 10,
+) -> UpdateCheckResult:
+    url = normalize_update_check_url(check_url)
+    try:
+        from src.backend.update_client import (
+            UpdateHttpError,
+            fetch_bytes,
+            fetch_final_url,
+            github_headers,
+        )
+
+        body = fetch_bytes(url, github_headers(), timeout_ms=timeout * 1000)
+        return check_for_update_from_body(body, current_version)
+    except Exception as exc:
+        err = f"{type(exc).__name__}: {exc}"
+        logging.warning("API update check failed: %s", err)
+        if _is_github_rate_limit_error(err) or "403" in err:
+            try:
+                final_url = fetch_final_url(
+                    GITHUB_RELEASES_LATEST_PAGE,
+                    github_headers(),
+                    timeout_ms=timeout * 1000,
+                )
+                logging.info("Fell back to release page redirect: %s", final_url)
+                return check_for_update_from_redirect(final_url, current_version)
+            except Exception as fallback_exc:
+                logging.error("Redirect update check failed: %s", fallback_exc)
+                return UpdateCheckResult(
+                    error=(
+                        "GitHub API rate limit exceeded. "
+                        f"Fallback check also failed: {fallback_exc}"
+                    ),
+                )
+        logging.error("Update check failed: %s", err)
+        return UpdateCheckResult(error=err)
+
+
+def _download_dest_path(dest_dir: Path, latest_version: str, asset_kind: str) -> Path:
+    if asset_kind == "zip":
+        return dest_dir / f"Nudge-{latest_version}-windows.zip"
+    if asset_kind == "installer":
+        return dest_dir / f"Nudge-Setup-{latest_version}.exe"
+    if asset_kind == "dmg":
+        return dest_dir / f"Nudge-{latest_version}.dmg"
+    if asset_kind == "appimage":
+        return dest_dir / f"Nudge-{latest_version}.AppImage"
+    return dest_dir / f"Nudge_{latest_version}{_PLATFORM_EXT}"
 
 
 def download_update(
@@ -512,86 +563,48 @@ def download_update(
     dest_dir: Path,
     latest_version: str,
     progress_callback: Optional[Callable[[int, int], None]] = None,
+    asset_kind: str = "",
 ) -> tuple[Optional[Path], str]:
-    """Download the update installer. Returns (path, error_msg).
-
-    error_msg is empty on success. Tries Python SSL first (with one retry),
-    then falls back to PowerShell Invoke-WebRequest on Windows.
-    """
+    """Download the update asset. Returns (path, error_msg)."""
     dest_dir.mkdir(parents=True, exist_ok=True)
-    # Clean up any stale temp files from previous failed downloads
-    for stale in dest_dir.glob("Nudge_*"):
+    for stale in dest_dir.glob("Nudge*"):
         try:
-            stale.unlink(missing_ok=True)
+            if stale.is_file():
+                stale.unlink(missing_ok=True)
         except OSError:
             pass
-    ext = _PLATFORM_EXT
-    dest_path = dest_dir / f"Nudge_{latest_version}{ext}"
-    last_err = ""
 
-    # --- attempt 1 & 2: Python urllib (with one retry on SSL/redirect) ---
-    ctx = _get_ssl_context()
-    if ctx is not None:
-        for attempt in range(2):
-            try:
-                from urllib.request import Request, urlopen
-                req = Request(download_url, headers={"User-Agent": "Nudge/1.0"})
-                with urlopen(req, timeout=60, context=ctx) as resp:
-                    try:
-                        total = int(resp.headers.get("Content-Length", 0) or 0)
-                    except (ValueError, TypeError):
-                        total = 0
-                    downloaded = 0
-                    with open(dest_path, "wb") as f:
-                        while True:
-                            chunk = resp.read(65536)
-                            if not chunk:
-                                break
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                            if progress_callback:
-                                progress_callback(downloaded, total)
-                return (dest_path, "")
-            except (URLError, HTTPError, OSError) as exc:
-                last_err = f"{type(exc).__name__}: {exc}"
-                logging.warning(
-                    "Download attempt %d failed: %s", attempt + 1, last_err,
-                )
-                if dest_path.exists():
-                    dest_path.unlink()
-                if attempt == 0:
-                    import time
-                    time.sleep(1)
+    dest_path = _download_dest_path(dest_dir, latest_version, asset_kind)
+    try:
+        from src.backend.update_client import UpdateHttpError, download_file, github_headers
 
-    # --- fallback: PowerShell (works when _ssl DLL is broken) ---
-    if is_windows():
-        for attempt in range(2):
-            try:
-                logging.info("Trying PowerShell fallback download (attempt %d)", attempt + 1)
-                _ps_download(download_url, dest_path, timeout=120, progress_callback=progress_callback)
-                return (dest_path, "")
-            except Exception as exc:
-                last_err = f"PowerShell fallback: {type(exc).__name__}: {exc}"
-                logging.error("PowerShell download failed: %s", last_err)
-                if dest_path.exists():
-                    try:
-                        dest_path.unlink()
-                    except OSError:
-                        pass
-                if attempt == 0:
-                    import time
-                    time.sleep(2)
-
-    return (None, last_err or "Unknown download error")
+        download_file(
+            download_url,
+            dest_path,
+            progress_callback=progress_callback,
+            headers=github_headers(),
+        )
+        return (dest_path, "")
+    except Exception as exc:
+        logging.error("Download failed: %s: %s", type(exc).__name__, exc)
+        if dest_path.exists():
+            dest_path.unlink(missing_ok=True)
+        return (None, f"{type(exc).__name__}: {exc}")
 
 
-def perform_update(download_url: str, latest_version: str) -> bool:
+def perform_update(
+    download_url: str,
+    latest_version: str,
+    asset_kind: str = "",
+) -> bool:
     if not getattr(sys, "frozen", False):
         logging.warning("Not a frozen app — skipping update install (dev mode)")
         return True
     current_exe = Path(sys.executable)
     temp_dir = Path(tempfile.gettempdir()) / "Nudge_update"
-    downloaded, err = download_update(download_url, temp_dir, latest_version)
+    downloaded, err = download_update(
+        download_url, temp_dir, latest_version, asset_kind=asset_kind,
+    )
     if downloaded is None:
         logging.error("Update download failed: %s", err)
         return False
@@ -601,7 +614,11 @@ def perform_update(download_url: str, latest_version: str) -> bool:
 def _install_update(downloaded: Path, current_exe: Path) -> bool:
     """Run the platform-appropriate installer for the downloaded asset."""
     if is_windows():
-        return _spawn_installer(downloaded, current_exe)
+        if downloaded.suffix.lower() == ".zip":
+            return _install_zip_windows(downloaded, current_exe)
+        if downloaded.suffix.lower() == ".exe":
+            return _spawn_setup_installer(downloaded)
+        return False
     if is_macos():
         return _install_dmg(downloaded, current_exe)
     if is_linux():
@@ -609,22 +626,56 @@ def _install_update(downloaded: Path, current_exe: Path) -> bool:
     return False
 
 
-def _spawn_installer(downloaded_exe: Path, current_exe: Path) -> bool:
-    temp_dir = downloaded_exe.parent
-    script_path = temp_dir / "install.ps1"
-
-    ps_script = f"""Start-Sleep -Seconds 2
-Stop-Process -Name "Nudge" -Force -ErrorAction SilentlyContinue
-Copy-Item "{downloaded_exe}" "{current_exe}" -Force
-Start-Process "{current_exe}"
-Remove-Item "{downloaded_exe}" -Force
-Remove-Item "{script_path}" -Force
-"""
+def _install_zip_windows(zip_path: Path, current_exe: Path) -> bool:
+    """Extract a release zip over the current onedir install folder."""
+    extract_dir = Path(tempfile.mkdtemp(prefix="nudge_update_"))
+    app_dir = current_exe.parent
     try:
-        script_path.write_text(ps_script, encoding="utf-8")
+        with zipfile.ZipFile(zip_path) as zf:
+            zf.extractall(extract_dir)
+        for item in extract_dir.iterdir():
+            dest = app_dir / item.name
+            if item.is_dir():
+                if dest.exists():
+                    shutil.rmtree(dest)
+                shutil.copytree(item, dest)
+            else:
+                shutil.copy2(item, dest)
+        return _spawn_restart_windows(current_exe)
+    except (OSError, zipfile.BadZipFile) as exc:
+        logging.error("Zip install failed: %s", exc)
+        return False
+    finally:
+        shutil.rmtree(extract_dir, ignore_errors=True)
+
+
+def _spawn_restart_windows(current_exe: Path) -> bool:
+    bat_path = Path(tempfile.gettempdir()) / "nudge_restart.bat"
+    bat_content = (
+        "@echo off\r\n"
+        "timeout /t 2 /nobreak >nul\r\n"
+        "taskkill /IM Nudge.exe /F >nul 2>&1\r\n"
+        f'start "" "{current_exe}"\r\n'
+        'del "%~f0"\r\n'
+    )
+    try:
+        bat_path.write_text(bat_content, encoding="utf-8")
         subprocess.Popen(
-            ["powershell", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", str(script_path)],
+            ["cmd", "/c", str(bat_path)],
             close_fds=True,
+            creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+        )
+        return True
+    except OSError:
+        return False
+
+
+def _spawn_setup_installer(setup_exe: Path) -> bool:
+    try:
+        subprocess.Popen(
+            [str(setup_exe), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
+            close_fds=True,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
         return True
     except OSError:
