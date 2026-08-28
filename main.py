@@ -20,6 +20,10 @@ def main():
 
     # Single-instance guard: if another instance is already running, exit silently.
     if not try_lock():
+        print(
+            "[Nudge] Another instance is already running "
+            "(check the system tray). Exiting."
+        )
         sys.exit(0)
 
     # Set the default window icon (used by every top-level widget /
