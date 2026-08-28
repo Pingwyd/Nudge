@@ -25,8 +25,19 @@ class DialogManager:
     def run_side_dialog(self, dialog: QDialog) -> None:
         """Show a non-modal side panel and track it for export avoidance."""
         self._active_side_dialog = dialog
+        self._mw_show_dim()
         dialog.finished.connect(lambda r, d=dialog: self._on_side_dialog_closed(d))
         dialog.show()
+
+    def _mw_show_dim(self) -> None:
+        overlay = getattr(self._mw, "_dim_overlay", None)
+        if overlay is not None:
+            overlay.show_dim()
+
+    def _mw_hide_dim(self) -> None:
+        overlay = getattr(self._mw, "_dim_overlay", None)
+        if overlay is not None:
+            overlay.hide_dim()
 
     def _on_side_dialog_closed(self, dialog: QDialog) -> None:
         if self._active_side_dialog is dialog:
@@ -39,6 +50,7 @@ class DialogManager:
             self._export_dialog = None
         if self._reminders_dialog is dialog:
             self._reminders_dialog = None
+        self._mw_hide_dim()
         dialog.deleteLater()
 
     def window_rects_to_avoid(self, extra: QDialog | None = None) -> list:
@@ -49,6 +61,22 @@ class DialogManager:
         elif self._active_side_dialog is not None:
             rects.append(self._active_side_dialog.frameGeometry())
         return rects
+
+    def center_on_parent(self, dialog: QDialog) -> None:
+        """Center a dialog on the main window (not the monitor)."""
+        parent = self._mw
+        if dialog.width() <= 0 or dialog.height() <= 0:
+            dialog.adjustSize()
+        pg = parent.frameGeometry()
+        x = pg.x() + (pg.width() - dialog.width()) // 2
+        y = pg.y() + (pg.height() - dialog.height()) // 2
+        # Keep mostly on-screen while staying anchored to the app window
+        screen = parent.screen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            x = max(avail.left(), min(x, avail.right() - dialog.width()))
+            y = max(avail.top(), min(y, avail.bottom() - dialog.height()))
+        dialog.move(x, y)
 
     def place_dialog_near_geometry(
         self,

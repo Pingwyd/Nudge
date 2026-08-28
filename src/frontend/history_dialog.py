@@ -112,6 +112,7 @@ class HistoryDialog(GlassPanelDialog):
         header_layout.addWidget(self.search_bar)
 
         layout.addWidget(header_card)
+        self._header_card = header_card
         layout.addSpacing(HISTORY_STATS_GAP)
 
         self._stats_bar = QLabel()
@@ -146,10 +147,12 @@ class HistoryDialog(GlassPanelDialog):
         separator = QWidget()
         separator.setFixedHeight(HISTORY_SEPARATOR_HEIGHT)
         separator.setStyleSheet(f"background: {border_c};")
+        self._separator = separator
         layout.addWidget(separator)
 
         footer = QWidget()
         footer.setStyleSheet(history_footer_stylesheet(theme))
+        self._footer = footer
         footer_layout = QHBoxLayout(footer)
         footer_layout.setContentsMargins(*HISTORY_FOOTER_MARGINS)
         footer_layout.setSpacing(HISTORY_FOOTER_SPACING)
@@ -169,6 +172,7 @@ class HistoryDialog(GlassPanelDialog):
         clear_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         clear_all_btn.setStyleSheet(history_clear_all_button_stylesheet(theme))
         clear_all_btn.clicked.connect(self.clear_all_history)
+        self._clear_all_btn = clear_all_btn
         footer_layout.addWidget(clear_all_btn)
 
         close_btn = QPushButton("Close")
@@ -191,6 +195,40 @@ class HistoryDialog(GlassPanelDialog):
         if parent is not None and hasattr(parent, "app_state"):
             return normalize_theme_id(parent.app_state.get("theme", "dark"))
         return "dark"
+
+    def _on_parent_theme_applied(self, theme_id: str) -> None:
+        theme = get_theme(theme_id)
+        c = theme["colors"]
+        tmc = c.get("text_muted", "rgba(255,255,255,180)")
+        border_c = c.get("border", "rgba(255,255,255,60)")
+        if hasattr(self, '_header_card'):
+            self._header_card.setStyleSheet(history_header_card_stylesheet(theme))
+        if self.title_label:
+            self.title_label.setStyleSheet(history_title_stylesheet(theme))
+        if self.count_badge:
+            self.count_badge.setStyleSheet(history_count_badge_stylesheet(theme))
+        if self.search_bar:
+            self.search_bar.setStyleSheet(history_search_bar_stylesheet(theme))
+        if hasattr(self, '_stats_bar') and self._stats_bar:
+            self._stats_bar.setStyleSheet(
+                f"color: {tmc}; font-size: {FONT_SIZE_LABEL_MD}px; font-weight: bold; "
+                f"background: transparent; border: none; padding: 2px 20px;"
+            )
+        if hasattr(self, '_empty_state_widget') and self._empty_state_widget:
+            self._empty_state_widget.setStyleSheet(
+                f"color: {tmc}; font-size: {FONT_SIZE_BODY}px; padding: 20px 0; "
+                f"background: transparent; border: none;"
+            )
+        if hasattr(self, '_separator'):
+            self._separator.setStyleSheet(f"background: {border_c};")
+        if hasattr(self, '_footer'):
+            self._footer.setStyleSheet(history_footer_stylesheet(theme))
+        if hasattr(self, 'skip_delete_cb'):
+            self.skip_delete_cb.setStyleSheet(
+                f"font-size: {FONT_SIZE_LABEL_SM}px; color: {tmc}; background: transparent; spacing: 6px;"
+            )
+        if hasattr(self, '_clear_all_btn'):
+            self._clear_all_btn.setStyleSheet(history_clear_all_button_stylesheet(theme))
 
     def _filter_history(self, text):
         from src.frontend.history_row import HistoryRowWidget

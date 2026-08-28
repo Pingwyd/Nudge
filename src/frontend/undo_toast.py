@@ -1,7 +1,7 @@
 """Undo toast notification widget."""
 
 from PyQt6.QtCore import QPoint, Qt, QTimer
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from src.frontend.theme import get_theme, normalize_theme_id
 from src.constants import (
@@ -11,6 +11,7 @@ from src.constants import (
     TOAST_EDGE_MARGIN,
     TOAST_RADIUS,
     FONT_SIZE_BODY,
+    FONT_SIZE_LABEL_SM,
     SPACING_LG,
     DIALOG_BORDER_WIDTH,
 )
@@ -19,7 +20,15 @@ from src.constants import (
 class UndoToast(QFrame):
     """Non-blocking toast that auto-dismisses after a timeout, with an Undo button."""
 
-    def __init__(self, parent, message, undo_callback, timeout_ms=TOAST_DEFAULT_TIMEOUT_MS, dismissed_callback=None):
+    def __init__(
+        self,
+        parent,
+        message,
+        undo_callback,
+        timeout_ms=TOAST_DEFAULT_TIMEOUT_MS,
+        dismissed_callback=None,
+        detail: str | None = None,
+    ):
         super().__init__(parent)
         self._main_window = parent
         self._undo_callback = undo_callback
@@ -31,15 +40,27 @@ class UndoToast(QFrame):
         layout.setContentsMargins(*TOAST_MARGINS)
         layout.setSpacing(SPACING_LG)
 
+        text_col = QVBoxLayout()
+        text_col.setSpacing(2)
         msg_label = QLabel(message)
+        msg_label.setObjectName("undoToastMessage")
         msg_label.setWordWrap(True)
-        layout.addWidget(msg_label)
+        text_col.addWidget(msg_label)
+        self._detail_label = None
+        if detail:
+            detail_label = QLabel(detail)
+            detail_label.setObjectName("undoToastDetail")
+            detail_label.setWordWrap(True)
+            text_col.addWidget(detail_label)
+            self._detail_label = detail_label
+        layout.addLayout(text_col, 1)
 
         undo_btn = QPushButton("Undo")
-        undo_btn.setObjectName("ghostButton")
+        undo_btn.setObjectName("undoToastAction")
         undo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         undo_btn.clicked.connect(self._on_undo)
         layout.addWidget(undo_btn)
+        self._undo_btn = undo_btn
 
         dismiss_btn = QPushButton("X")
         dismiss_btn.setObjectName("ghostButton")
@@ -138,18 +159,35 @@ class UndoToast(QFrame):
             theme_id = normalize_theme_id(parent.app_state.get("theme", "dark"))
         theme = get_theme(theme_id)
         c = theme["colors"]
+        radii = theme["radii"]
         self.setStyleSheet(f"""
             QFrame#undoToast {{
                 background: {c.get('glass_start', '#1e1e1e')};
                 border: {DIALOG_BORDER_WIDTH}px solid {c.get('border', 'rgba(255,255,255,60)')};
                 border-radius: {TOAST_RADIUS}px;
             }}
-            QLabel {{
+            QLabel#undoToastMessage {{
                 color: {c.get('text', '#ffffff')};
                 font-size: {FONT_SIZE_BODY}px;
+                font-weight: 600;
             }}
-            QPushButton {{
-                color: {c.get('accent', '#4fc3f7')};
+            QLabel#undoToastDetail {{
+                color: {c.get('text_muted', 'rgba(255,255,255,180)')};
+                font-size: {FONT_SIZE_LABEL_SM}px;
+            }}
+            QPushButton#undoToastAction {{
+                background: transparent;
+                color: {c.get('accent', '#F5A623')};
+                border: none;
+                padding: 4px 8px;
+                font-size: {FONT_SIZE_BODY}px;
+                font-weight: 700;
+            }}
+            QPushButton#undoToastAction:hover {{
+                color: {c.get('accent_hover', '#FFB83D')};
+            }}
+            QPushButton#ghostButton {{
+                color: {c.get('text_muted', 'rgba(255,255,255,180)')};
                 font-weight: bold;
                 font-size: {FONT_SIZE_BODY}px;
                 border: none;

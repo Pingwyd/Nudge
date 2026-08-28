@@ -58,6 +58,7 @@ class TestTaskFlow:
 
         tasks[0]["done"] = True
         store.save(tasks)
+        store.flush()
 
         loaded = store.load()
         assert loaded[0]["done"] is True
@@ -153,6 +154,7 @@ class TestStateManagerIntegration:
         for i in range(10):
             sm.state["test_key"] = f"value_{i}"
             sm.save()
+        sm.flush()
 
         with patch("src.backend.state_manager.get_data_file", return_value=filepath):
             loaded = StateManager("state.json")
@@ -189,6 +191,7 @@ class TestGroupStoreIntegration:
         data["groups"].append(create_group("Work", order=1))
         data["groups"].append(create_group("Personal", order=2))
         gs.save(data)
+        gs.flush()
 
         data = gs.load()
         assert len(data["groups"]) == 3  # General + Work + Personal
@@ -198,12 +201,14 @@ class TestGroupStoreIntegration:
 
         work_group["name"] = "Office"
         gs.save(data)
+        gs.flush()
 
         data = gs.load()
         assert data["groups"][1]["name"] == "Office"
 
         data["groups"].pop(1)
         gs.save(data)
+        gs.flush()
 
         data = gs.load()
         assert len(data["groups"]) == 2
