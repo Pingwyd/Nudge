@@ -8,7 +8,7 @@ from urllib.parse import quote
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtWidgets import (QApplication, QDialog, QHBoxLayout, QLabel,
-                             QPushButton, QTextEdit, QVBoxLayout)
+                             QMainWindow, QPushButton, QTextEdit, QVBoxLayout)
 
 from src import __version__
 from src.backend.crash_reporter import build_mailto_body, write_crash_log
@@ -208,7 +208,13 @@ def install_crash_handler():
         try:
             app = QApplication.instance()
             if app is not None:
-                dialog = CrashDialog(exc_type, exc_value, exc_tb)
+                parent = app.activeWindow()
+                if parent is None:
+                    for w in app.topLevelWidgets():
+                        if isinstance(w, QMainWindow):
+                            parent = w
+                            break
+                dialog = CrashDialog(exc_type, exc_value, exc_tb, parent=parent)
                 dialog.exec()
             else:
                 old_hook(exc_type, exc_value, exc_tb)
