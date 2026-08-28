@@ -169,6 +169,17 @@ class StateManager:
                         self.state["settingsShortcut"] = self.state["settingsShortcuts"][0]
                     self.state.pop("historyShortcuts", None)
                     self.state.pop("settingsShortcuts", None)
+                    from src.backend.updater import normalize_update_check_url
+
+                    fixed_url = normalize_update_check_url(
+                        self.state.get("updateCheckUrl")
+                    )
+                    if self.state.get("updateCheckUrl") != fixed_url:
+                        logger.info(
+                            "Migrating stale updateCheckUrl to %s", fixed_url
+                        )
+                        self.state["updateCheckUrl"] = fixed_url
+                        self.save()
             except (json.JSONDecodeError, OSError):
                 pass
         logger.debug("State loaded: %d keys", len(self.state))

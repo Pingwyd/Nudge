@@ -106,7 +106,6 @@ qt_excludes = [
     "PyQt6.QtWebSockets",
     "PyQt6.QtXml",
     "PyQt6.QtLocation",
-    "PyQt6.QtNetwork",
     "PyQt6.QtWebEngine",
     "PyQt6.QtWebEngineCore",
     "PyQt6.QtWebEngineWidgets",
@@ -137,6 +136,7 @@ a = Analysis(
         "PyQt6.QtCore",
         "PyQt6.QtGui",
         "PyQt6.QtWidgets",
+        "PyQt6.QtNetwork",
     ]
     + pyqt6_extra_hidden
     + pyqt6_hiddenimports

@@ -1,7 +1,6 @@
 import ctypes
 import logging
 import sys
-import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -31,8 +30,8 @@ from src.backend.task_groups import (GENERAL_GROUP_ID, create_group,
                                      rebuild_tasks_preserving_groups,
                                      sorted_groups, tasks_for_group)
 from src.backend.task_store import TaskStore
-from src.backend.updater import (UpdateCheckResult, check_for_update,
-                                 parse_changelog)
+from src.backend.updater import UpdateCheckResult, normalize_update_check_url, parse_changelog
+from src.backend.update_client import UpdateClient
 from src.backend.window_geometry import (DEFAULT_WINDOW_HEIGHT,
                                          DEFAULT_WINDOW_WIDTH,
                                          MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH)
@@ -150,7 +149,6 @@ class GlowOverlay(QWidget):
 
 
 class MainWindow(QMainWindow):
-    _update_check_done = pyqtSignal(object)
     theme_applied = pyqtSignal(str)
 
     def __init__(self):
@@ -239,7 +237,8 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(DWM_SHADOW_DISABLE_SECOND_MS, self._reapply_dwm_shadow_disable)
 
         # Thread-safe update check result handler
-        self._update_check_done.connect(self._on_update_check_done)
+        self._update_client = UpdateClient(self)
+        self._update_client.check_finished.connect(self._on_update_check_done)
 
         # Boot-time update check (deferred 3s so UI can finish rendering first)
         if self.app_state.get("checkForUpdates", True):
@@ -796,11 +795,8 @@ class MainWindow(QMainWindow):
         self._propagate_always_on_top()
 
     def _check_and_prompt_update(self):
-        def _check():
-            result = check_for_update(__version__)
-            self._update_check_done.emit(result)
-        t = threading.Thread(target=_check, daemon=True)
-        t.start()
+        url = normalize_update_check_url(self.app_state.get("updateCheckUrl"))
+        self._update_client.start_check(__version__, url)
 
     def _on_update_check_done(self, result):
         if result.error:
@@ -831,10 +827,16 @@ class MainWindow(QMainWindow):
         avoid = self._window_rects_to_avoid()
         self._place_dialog_avoiding_rects(dialog, avoid)
         self._update_info_dialog = dialog
-        dialog.accepted.connect(lambda: self._apply_update(result.download_url, result.latest_version))
+        dialog.accepted.connect(
+            lambda: self._apply_update(
+                result.download_url,
+                result.latest_version,
+                result.asset_kind,
+            )
+        )
         dialog.show()
 
-    def _apply_update(self, download_url: str, version: str):
+    def _apply_update(self, download_url: str, version: str, asset_kind: str = ""):
         cached_path = self.app_state.get("cachedDownloadPath", "")
         cached_version = self.app_state.get("cachedDownloadVersion", "")
         if (cached_version == version
@@ -842,7 +844,7 @@ class MainWindow(QMainWindow):
                 and Path(cached_path).exists()):
             self._show_install_prompt(cached_path, version, from_cache=True)
             return
-        dialog = DownloadDialog(version, download_url, self)
+        dialog = DownloadDialog(version, download_url, asset_kind, self)
         avoid = self._window_rects_to_avoid()
         self._place_dialog_avoiding_rects(dialog, avoid)
         self._download_dialog = dialog

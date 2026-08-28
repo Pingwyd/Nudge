@@ -5,6 +5,22 @@ All notable changes to Nudge are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.3] - 2026-08-28
+
+### Added
+- **`dev.py`** — hot-reload dev runner restored at project root.
+- **`scripts/test_update.py`** — CLI to test update check/download without editing `__version__`.
+
+### Changed
+- **Qt-based updater** — update check and download use `QNetworkAccessManager` instead of urllib/PowerShell.
+- **GitHub rate-limit fallback** — when the API returns 403, resolves version via `/releases/latest` redirect.
+- **Windows install** — in-place updates extract `*-windows.zip`; setup exe runs Inno silent install.
+
+### Fixed
+- **Stale `updateCheckUrl`** — migrates placeholder `user/nudge` URLs in appstate on load.
+- **Update dialog crash** — missing `FONT_SIZE_BODY` import.
+- **Asset selection** — Windows prefers release zip over the Inno setup exe for auto-updates.
+
 ## [2.0.2] - 2026-08-28
 
 ### Fixed

@@ -39,6 +39,7 @@ from src.constants import (
     SPACING_LG,
     FONT_SIZE_HINT,
     FONT_SIZE_LABEL_SM,
+    FONT_SIZE_BODY,
     FONT_SIZE_TITLE_MD,
     FONT_SIZE_TITLE_LG,
     BTN_MIN_WIDTH_XL,
@@ -142,19 +143,29 @@ class DownloadThread(QThread):
     progress = pyqtSignal(int, int)
     finished = pyqtSignal(bool, str, str, str)
 
-    def __init__(self, download_url: str, version: str, parent=None):
+    def __init__(
+        self,
+        download_url: str,
+        version: str,
+        asset_kind: str = "",
+        parent=None,
+    ):
         super().__init__(parent)
         self.download_url = download_url
         self.version = version
+        self.asset_kind = asset_kind
 
     def run(self):
-        from src.backend.updater import download_update, _PLATFORM_EXT
+        from src.backend.updater import download_update
         import tempfile
 
         temp_dir = Path(tempfile.gettempdir()) / "Nudge_update"
         path, err = download_update(
-            self.download_url, temp_dir, self.version,
+            self.download_url,
+            temp_dir,
+            self.version,
             progress_callback=lambda dl, total: self.progress.emit(dl, total),
+            asset_kind=self.asset_kind,
         )
         if path is not None:
             self.finished.emit(True, "", str(path), self.version)
@@ -165,10 +176,17 @@ class DownloadThread(QThread):
 class DownloadDialog(GlassPanelDialog):
     download_ready = pyqtSignal(str, str)
 
-    def __init__(self, latest_version: str, download_url: str, parent=None):
+    def __init__(
+        self,
+        latest_version: str,
+        download_url: str,
+        asset_kind: str = "",
+        parent=None,
+    ):
         super().__init__(parent)
         self.latest_version = latest_version
         self.download_url = download_url
+        self.asset_kind = asset_kind
         self._thread = None
         self._init_ui()
 
@@ -227,7 +245,12 @@ class DownloadDialog(GlassPanelDialog):
         self._apply_theme()
 
     def start_download(self):
-        self._thread = DownloadThread(self.download_url, self.latest_version, self)
+        self._thread = DownloadThread(
+            self.download_url,
+            self.latest_version,
+            self.asset_kind,
+            self,
+        )
         self._thread.progress.connect(self._on_progress)
         self._thread.finished.connect(self._on_finished)
         self._thread.start()
