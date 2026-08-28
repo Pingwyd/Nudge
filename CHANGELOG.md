@@ -5,6 +5,122 @@ All notable changes to Nudge are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-08-28
+
+### Added
+- **Task search bar** — Ctrl+F opens an inline search bar with scope filters (tasks, groups, tags).
+- **Tray quick-add** — add tasks quickly from the system tray context menu.
+- **Dim overlay** — subtle backdrop when search or modal flows are active.
+- **Debounced persistence** — batches rapid disk writes for tasks, groups, and app state.
+
+### Changed
+- **Theme/settings performance** — faster live theme and text-size changes without full UI freezes.
+- **Resize performance** — smoother window resizing by deferring per-row text reflow until the drag ends.
+- **Task row pooling** — reuses row widgets across renders to reduce startup and re-render cost.
+
+### Fixed
+- **Pin to desktop** — survives Win+D / Show Desktop and HWND recreation after layer changes.
+- **Global hotkeys** — tray toggle shortcut rebinds correctly after `setWindowFlags`.
+- **Flat view boot** — tasks visible immediately when groups are disabled on launch.
+- **Startup ghost frames** — no stray window outlines during first paint.
+- **Group search** — with groups enabled, search shows only matching tasks inside each group.
+- **Single instance** — second launch prints a clear message when Nudge is already running.
+
+## [2.0.0] - 2026-07-02
+
+### Added
+- **Clipboard import** — press Ctrl+Shift+V to paste multiple lines of text, each line becomes a separate task.
+- **Sound effects** — optional completion sound when tasks are checked off (toggle in Settings → Sound).
+- **Stats bar in History** — shows total tasks, today's count, and yesterday's count at the top of the History tab.
+- **Card-style task rows in History** — completed tasks display as rounded cards instead of flat rows.
+- **Collapse chevrons on History sections** — time period sections (Today, Yesterday, etc.) can now be expanded/collapsed.
+- **Ctrl+F to focus tag filter** — quick keyboard shortcut to jump to the tag filter dropdown.
+- **Task search** — filter visible tasks in real-time from the title bar.
+
+### Changed
+- **History tab sorted most-recent-first** — tasks now appear with the most recent at the top within each time period.
+- **Button size reduced in message dialogs** — Quit, Delete, Clear History and other confirmation dialogs use smaller, better-proportioned buttons.
+- **Magic numbers replaced with named constants** — 20 UI files cleaned up with centralized spacing, sizing, and margin constants in `src/constants.py`.
+- **Bold divider on last high-priority task** — the divider line after the final high-priority task is now bolder for clearer section separation.
+- **Priority header removed when all high-priority tasks completed** — the "HIGH PRIORITY" header disappears automatically when no high-priority tasks remain.
+
+### Fixed
+- **History count not updating on delete** — deleting tasks from History now correctly updates the section count badge.
+- **History tab not updating when task completed while open** — newly completed tasks now appear in History without closing and reopening.
+- **Footer task count not updating** — the task count in the footer bar now updates when tasks are added or removed.
+- **Button clipping in ThemedMessageDialog** — confirmation dialog buttons no longer get clipped at the bottom edge.
+- **Group combo not populating on restart** — the group dropdown now shows all groups immediately on app startup instead of being empty until a new group is created.
+
+## [1.14.0] - 2026-06-29
+
+### Added
+- **Flat list priority view** — when groups are disabled, high-priority tasks appear first with a "HIGH PRIORITY" header and a divider separating them from normal tasks. Header and divider use theme accent colors.
+- **Drag-and-drop import** — drag text, URLs, or files from any app (Notepad, Chrome, Explorer) onto the task list to create tasks instantly. Files use the filename (no extension) as task text. Multiple items create multiple tasks in order.
+- **Drop indicator overlay** — a subtle accent-tinted dashed border overlay appears when dragging external content over the task list, signaling the drop zone.
+
+### Changed
+- **History shortcut toggles** — pressing Ctrl+H now closes the history dialog if it's already open, instead of doing nothing.
+- **Reminders shortcut configurable** — Alt+R can now be changed in Settings → Shortcuts. Previously it was the only shortcut not wired through the shortcuts tab.
+- **Reminders dialog tracked** — pressing Alt+R now toggles the reminders popup (close if open), with proper overlap avoidance via DialogManager.
+- **FIX-D1 shortcut suppression narrowed** — shortcut suppression now only applies when the main window's own input bar has focus. Dialog search bars (e.g., History search) no longer block shortcuts.
+- **Footer separator restyled** — uses theme border color and updates on theme switch.
+- **Footer history button restyled** — visible border using theme colors, slightly larger padding and font for better readability.
+- **Footer task count updates on theme switch** — text color now follows the theme's text_muted token.
+
+### Fixed
+- **History shortcut not closing dialog** — was suppressed by any QLineEdit focus (including the history dialog's own search bar). Now only suppressed when the main input bar has focus.
+- **Reminders dialog not tracked** — pressing Alt+R opened a new dialog every time without closing the existing one. Now tracked in DialogManager with proper toggle behavior.
+- **Reminders shortcut save fallback inconsistent** — was `or ""` (empty string), now `or "Alt+R"` matching all other shortcuts.
+- **Footer border persisting** — separator and history button borders now properly themed and updatable on theme switch.
+- **Footer task count white text in light mode** — label stylesheet now updates with theme text_muted color.
+
+## [1.13.0] - 2026-06-24
+
+### Added
+- **Task checkboxes** — each task now has a checkbox to mark it complete. Completed tasks move to History.
+- **Due dates** — right-click a task → Set Due Date to add a deadline. Due dates display as colored chips next to the task.
+- **Priority indicators** — right-click a task → Set Priority to mark as High priority. High priority tasks show a red indicator.
+- **Tags with colors** — right-click a task → Add Tag to organize tasks. Tags appear as colored pills next to the task text. Click a tag pill to change its color with the 8-color palette picker.
+- **Recurring tasks** — right-click a task → Set Recurrence to repeat daily, weekly, or monthly. When completed, the task automatically recreates with the next due date.
+- **Tag filter dropdown** — filter the task list by specific tags using the dropdown in the title bar. Supports multiple tag selection.
+- **Font selection** — choose a custom font for task text in Settings → Appearance.
+- **History retention setting** — configure how long to keep history (5 days to Forever) in Settings → Advanced. Older entries are automatically removed on startup.
+- **Reminders popup** — press Alt+R to open a popup showing all pending task reminders with cancel options.
+- **Footer bar** — shows task count and a shortcut to History for quick access.
+- **Tutorial update** — welcome guide now covers checkboxes, due dates, priority, tags, recurring tasks, tag filter, font selection, history retention, and reminders popup.
+
+### Changed
+- **History dialog redesigned** — header card with task count badge, search by task text or group name, trash icon button, timestamps on entries, footer with Clear All and Close buttons.
+- **Button styles unified** — all buttons (primary, ghost, danger, accent, sidebar, dialog) use consistent 13px font, 500 weight, 8px 20px padding, and 8px border-radius.
+- **Overflow menu** — divider added between utility actions and community links. Menu opens from left edge of ··· button.
+- **Glass panel drag** — removed deferred move pattern for smoother dragging. Overlap detection only on mouse release.
+- **Clear all confirmation** — always shows confirmation dialog with shorter message: "Clear ALL history entries? This cannot be undone."
+- **Reset to defaults** — shortened confirmation message: "Reset all settings on this tab to defaults?"
+- **Skip confirmation** — shortened to "Skip confirmation" to prevent text clipping.
+
+### Fixed
+- **QComboBox dropdown theming** — dropdowns now properly inherit theme colors via QPalette instead of CSS. Styled with monkey-patched showPopup for each combo.
+- **Tag filter combo background** — dropdown uses menu background color to match theme.
+- **Tag color picker focus loss** — picker now closes when clicking outside the app window using QApplication.focusChanged signal.
+- **Crash dialog emoji clipping** — emoji label uses transparent background and fixed height.
+- **Crash dialog details toggle** — expand/collapse now resizes dialog instead of relying on sizeHint.
+- **Tag filter clear button** — improved styling with red hover state and bold × symbol.
+- **Tag filter toggle in Settings** — "Enable tag filter bar" checkbox in Advanced tab to show/hide the filter dropdown.
+- **Settings last tab remembered** — Settings dialog opens to the tab you were last on.
+- **Tag filter dropdown styling** — uses QPalette for selection colors instead of CSS selection-background-color.
+- **Badges clipping at minimum window size** — badges widget uses setMaximumWidth to allow layout compression.
+- **Windows notifications** — boot notifications now use winotify with correct app icon instead of QSystemTrayIcon showing Python icon.
+- **QComboBox popup QPalette** — popup window now gets QPalette set on each showPopup via monkey-patching.
+- **SettingsCardWidget theming** — cards update border and title colors when theme changes.
+- **DueDateChip light mode** — chip uses theme text color and updates on theme switch.
+- **TaskRowWidget theme refresh** — all task rows update due dates, priority, checkboxes, and countdown labels on theme switch.
+- **QFont::setPointSize warning** — changed to setPixelSize in task_group_section and history_row.
+- **Glass panel dialog smooth drag** — removed deferred move pattern; direct self.move() in mouseMoveEvent.
+- **Footer bar added** — task count label and History shortcut button at bottom of main window.
+- **History button moved to footer** — removed from top bar for cleaner layout.
+- **Overflow menu divider** — separator between utility and community actions.
+- **Tag filter group search** — search bar now matches both task text AND group name.
+
 ## [1.12.0] - 2026-06-22
 
 ### Added

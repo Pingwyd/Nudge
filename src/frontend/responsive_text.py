@@ -10,7 +10,8 @@ from typing import Iterable, Optional
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFontMetrics, QTextOption
-from PyQt6.QtWidgets import QLabel, QLineEdit, QSizePolicy, QStackedWidget, QWidget
+from PyQt6.QtWidgets import (QLabel, QLineEdit, QSizePolicy, QStackedWidget,
+                             QWidget)
 
 
 def min_text_column_width(available_width: int) -> int:
@@ -45,6 +46,11 @@ def fix_single_line_editor_height(editor: QLineEdit, vertical_padding: int = 14)
 
 
 def label_content_height(label: QLabel, column_width: int) -> int:
+    """Return the height QLabel needs for *column_width* pixels of word-wrap."""
+    hfw = label.heightForWidth(max(1, column_width))
+    if hfw > 0:
+        return hfw
+    # Fallback for widgets that don't support height-for-width.
     metrics = QFontMetrics(label.font())
     wrap_flags = int(Qt.TextFlag.TextWordWrap)
     if hasattr(Qt.TextFlag, "TextWrapAnywhere"):
@@ -56,11 +62,26 @@ def label_content_height(label: QLabel, column_width: int) -> int:
 
 
 def sync_stacked_page_height(stack: QStackedWidget, content_height: int) -> None:
-    stack.setFixedHeight(max(1, content_height))
+    """Lock the stack to exactly *content_height* pixels.
+
+    Using only setMinimumHeight leaves the stack free to grow to its
+    sizeHint(), which for a word-wrapping QLabel is calculated at the
+    label's *current* (possibly narrow) width — often far too tall.
+    Setting both min and max forces the layout to use our calculated height.
+    The next sync_text_layout (triggered by resizeEvent) updates it.
+    """
+    h = max(1, content_height)
+    stack.setMinimumHeight(h)
+    stack.setMaximumHeight(h)
 
 
 def available_text_width(host: QWidget, reserved: Iterable[QWidget]) -> int:
-    """Pixels left for the text column after margins, spacing, and sibling widgets."""
+    """Pixels left for the text column after margins, spacing, and sibling widgets.
+
+    Only subtracts widgets in *reserved* — the text container itself (e.g.
+    content_stack with stretch=1) must NOT be in this list, because its width
+    is the *result* of the layout allocation, not a fixed deduction.
+    """
     layout = host.layout()
     if layout is None:
         return max(1, host.width())
@@ -76,11 +97,10 @@ def available_text_width(host: QWidget, reserved: Iterable[QWidget]) -> int:
         widget_count += 1
         widget = item.widget()
         if widget in reserved_set:
-            sp = widget.sizePolicy()
-            if sp.horizontalPolicy() in (QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum):
-                w = widget.sizeHint().width()
-            else:
-                w = widget.width() or widget.sizeHint().width()
+            # Prefer sizeHint() — updated immediately by updateGeometry()/setFixedWidth().
+            # widget.width() can be stale before the layout engine re-runs.
+            hint_w = widget.sizeHint().width()
+            w = hint_w if hint_w > 0 else (widget.width() or hint_w)
             available -= w
     if widget_count > 1:
         available -= layout.spacing() * (widget_count - 1)
@@ -108,15 +128,11 @@ class ResponsiveTextRowHelper:
         """Tell the helper which widget's actual width is the text area."""
         self._content_stack = stack
 
-    def sync_layout(self) -> None:
-        # Prefer the content stack's actual layout-allocated width over
-        # the re-calculated available_text_width() — it is always correct
-        # once the layout engine has settled.
-        if self._content_stack is not None and self._content_stack.width() > 10:
-            width = self._content_stack.width()
-        else:
-            width = available_text_width(self.host, self.reserved_widgets)
+    def sync_layout(self) -> int:
+        """Set label/editor max-width and return the calculated width (px)."""
+        width = available_text_width(self.host, self.reserved_widgets)
         apply_wrapped_text_width(self.label, width)
         if self.editor is not None:
             apply_editor_field_width(self.editor, width)
             fix_single_line_editor_height(self.editor)
+        return width

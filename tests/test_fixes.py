@@ -17,17 +17,17 @@ from PyQt6.QtWidgets import QWidget, QLineEdit
 def test_a1_render_tasks_has_fix_annotation(qapp_instance):
     """render_tasks should have FIX-A1 comment (called only on initial load)."""
     import inspect
-    from src.frontend.main_window import MainWindow
-    src = inspect.getsource(MainWindow.render_tasks)
+    from src.frontend.task_controller import TaskController
+    src = inspect.getsource(TaskController.render_tasks)
     assert "FIX-A1" in src
 
 
 def test_a1_append_task_row_widget_exists(qapp_instance):
     """_append_task_row_widget should accept a single task and not call render_tasks."""
-    from src.frontend.main_window import MainWindow
-    assert hasattr(MainWindow, '_append_task_row_widget')
+    from src.frontend.task_controller import TaskController
+    assert hasattr(TaskController, '_append_task_row_widget')
     import inspect
-    src = inspect.getsource(MainWindow._append_task_row_widget)
+    src = inspect.getsource(TaskController._append_task_row_widget)
     assert "render_tasks" not in src
 
 
@@ -261,10 +261,12 @@ def test_d1_shortcut_has_window_context_in_code(qapp_instance):
     from src.frontend.main_window import MainWindow
     window = MainWindow()
     try:
+        sm = window._shortcut_manager
+        assert hasattr(sm, '_shortcuts')
         shortcuts = [
-            window.history_shortcut,
-            window.settings_shortcut,
-            window.pin_shortcut,
+            sm._shortcuts.get('history'),
+            sm._shortcuts.get('settings'),
+            sm._shortcuts.get('pin'),
         ]
         for sc in shortcuts:
             assert sc is not None

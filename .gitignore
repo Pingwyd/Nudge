@@ -98,3 +98,10 @@ prompt.md
 
 # ─── Project planning docs (local only) ────────────────────────────────────
 project-docs/
+sprint/
+net_master_plan.md
+docs/
+
+# ─── Dev scripts (not part of the app) ─────────────────────────────────────
+dev.py
+scripts/

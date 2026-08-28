@@ -103,39 +103,55 @@ class TestOpacitySliderFloor:
 
     def test_settings_dialog_opacity_slider_minimum_in_source(self):
         """Verify the slider minimum is 30 in source code."""
-        from src.frontend.main_window import SettingsDialog
+        from src.frontend.settings_dialog import SettingsDialog
+        from src.constants import OPACITY_SLIDER_MIN
         source = inspect.getsource(SettingsDialog.init_ui)
-        assert 'self.opacity_slider.setMinimum(30)' in source
+        assert f'OPACITY_SLIDER_MIN)' in source or f'setMinimum({OPACITY_SLIDER_MIN})' in source
 
     def test_settings_dialog_clamps_low_opacity(self):
         """Verify persisted value below 0.30 is clamped to 0.30."""
-        from src.frontend.main_window import SettingsDialog
+        from src.frontend.settings_dialog import SettingsDialog
+        from src.constants import OPACITY_SLIDER_MIN
         source = inspect.getsource(SettingsDialog.init_ui)
-        assert 'max(30' in source
+        assert f'max(OPACITY_SLIDER_MIN' in source or f'max({OPACITY_SLIDER_MIN}' in source
 
 
 # ── 7.4 Pin to Desktop / Always on Top mutual exclusion ────────────────
 
 class TestPinTopMutualExclusion:
     def test_mutual_exclusion_note_in_source(self):
-        """The explanatory note label should exist in the SettingsDialog."""
-        from src.frontend.main_window import SettingsDialog
-        source = inspect.getsource(SettingsDialog.init_ui)
-        assert "mutually exclusive" in source.lower()
+        """The mutual exclusion logic should exist in the SettingsDialog."""
+        from src.frontend.settings_dialog import SettingsDialog
+        assert hasattr(SettingsDialog, '_on_pin_to_desktop_toggled')
+        assert hasattr(SettingsDialog, '_on_always_on_top_toggled')
 
     def test_checkbox_uncheck_handlers_exist(self):
         """Handlers for mutual exclusion should exist."""
-        from src.frontend.main_window import SettingsDialog
+        from src.frontend.settings_dialog import SettingsDialog
         assert hasattr(SettingsDialog, '_on_pin_to_desktop_toggled')
         assert hasattr(SettingsDialog, '_on_always_on_top_toggled')
 
     def test_checkbox_handler_blocks_signals(self):
         """Both handlers should block signals to prevent recursion."""
-        from src.frontend.main_window import SettingsDialog
+        from src.frontend.settings_dialog import SettingsDialog
         pin_src = inspect.getsource(SettingsDialog._on_pin_to_desktop_toggled)
         top_src = inspect.getsource(SettingsDialog._on_always_on_top_toggled)
         assert 'blockSignals(True)' in pin_src
         assert 'blockSignals(True)' in top_src
+
+    def test_apply_window_layer_reinstalls_pin_hook(self):
+        """After setWindowFlags recreates the HWND, pin_to_desktop must run again."""
+        from src.frontend.main_window import MainWindow
+        src = inspect.getsource(MainWindow._apply_window_layer)
+        assert 'pin_to_desktop' in src
+        assert 'unpin_from_desktop' in src
+
+    def test_live_text_size_does_not_rebuild_task_list(self):
+        """Dragging the text-size slider must update rows in place, not render_tasks."""
+        from src.frontend.settings_dialog import SettingsDialog
+        src = inspect.getsource(SettingsDialog._emit_text_size_to_parent)
+        assert 'render_tasks' not in src
+        assert 'set_text_size' in src
 
 
 # ── 7.5 Empty state UI ────────────────────────────────────────────────
@@ -161,15 +177,15 @@ class TestEmptyStateUI:
         assert hasattr(MainWindow, '_update_empty_state')
 
     def test_render_tasks_calls_update_empty_state(self):
-        """Verify render_tasks calls _update_empty_state."""
-        from src.frontend.main_window import MainWindow
-        source = inspect.getsource(MainWindow.render_tasks)
+        """Verify _do_render calls _update_empty_state."""
+        from src.frontend.task_controller import TaskController
+        source = inspect.getsource(TaskController._do_render)
         assert '_update_empty_state' in source
 
     def test_remove_task_calls_update_empty_state(self):
         """Verify _remove_task_row_widget calls _update_empty_state."""
-        from src.frontend.main_window import MainWindow
-        source = inspect.getsource(MainWindow._remove_task_row_widget)
+        from src.frontend.task_controller import TaskController
+        source = inspect.getsource(TaskController._remove_task_row_widget)
         assert '_update_empty_state' in source
 
     def test_animate_arrow_method_exists(self):

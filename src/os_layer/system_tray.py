@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QSystemTrayIcon, QMenu, QApplication
-from PyQt6.QtGui import QIcon, QAction, QCursor
-from PyQt6.QtCore import QObject, pyqtSignal, QPoint, QRect
+import logging
+
+from PyQt6.QtCore import QObject, QPoint, QRect, pyqtSignal
+from PyQt6.QtGui import QAction, QCursor, QIcon
+from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from src import __app_name__, __version__
 
@@ -13,6 +15,7 @@ class SystemTrayManager(QObject):
     settings_requested = pyqtSignal()
     update_requested = pyqtSignal()
     reminders_requested = pyqtSignal()
+    quick_add_requested = pyqtSignal()
 
     def __init__(self, app: QApplication, icon: QIcon, parent: QObject | None = None):
         super().__init__(parent)
@@ -20,6 +23,7 @@ class SystemTrayManager(QObject):
         self._tray = QSystemTrayIcon(icon, app)
         self._tray.setToolTip(f"{__app_name__} v{__version__}")
         self._menu: QMenu | None = None
+        self._current_theme: dict | None = None
 
         self._build_menu()
         self._tray.activated.connect(self._on_activated)
@@ -27,10 +31,13 @@ class SystemTrayManager(QObject):
 
     def _build_menu(self, theme: dict | None = None) -> None:
         if theme is None:
-            from src.frontend.theme import get_theme, normalize_theme_id
+            theme = self._current_theme
+        if theme is None:
             from src.backend.state_manager import StateManager
+            from src.frontend.theme import get_theme, normalize_theme_id
             sm = StateManager()
             theme = get_theme(normalize_theme_id(sm.state.get("theme", "dark")))
+        self._current_theme = theme
 
         bg = theme["colors"].get("menu_bg", "rgba(40,40,40,220)")
         fg = theme["colors"].get("text", "#ffffff")
@@ -82,6 +89,9 @@ class SystemTrayManager(QObject):
         reminders_action = menu.addAction("Reminders")
         reminders_action.triggered.connect(self.reminders_requested.emit)
 
+        quick_add_action = menu.addAction("Quick Add")
+        quick_add_action.triggered.connect(self.quick_add_requested.emit)
+
         menu.addSeparator()
 
         update_action = menu.addAction("Check for Updates")
@@ -119,6 +129,28 @@ class SystemTrayManager(QObject):
             self.show_requested.emit()
 
     def show_message(self, title: str, message: str, msecs: int = 3000) -> None:
+        import sys
+        if sys.platform == "win32":
+            try:
+                from winotify import Notification, audio
+
+                from src.backend.icon import get_app_icon_path
+                icon_path = ""
+                resolved = get_app_icon_path()
+                if resolved is not None:
+                    icon_path = str(resolved)
+                toast = Notification(
+                    app_id="Nudge",
+                    title=title,
+                    msg=message,
+                    icon=icon_path,
+                    duration="short",
+                )
+                toast.set_audio(audio.Default, loop=False)
+                toast.show()
+                return
+            except Exception as e:
+                logging.warning("System tray operation failed: %s", e)
         self._tray.showMessage(title, message, QSystemTrayIcon.MessageIcon.Information, msecs)
 
     def hide(self) -> None:

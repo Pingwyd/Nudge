@@ -19,12 +19,12 @@ class TestCustomReminderDialog:
 
     def test_pre_populate_with_existing_reminder(self, qapp_instance):
         """6.1: Dialog should pre-populate pickers with existing reminder values."""
-        from src.frontend.main_window import MainWindow
+        from src.frontend.task_controller import TaskController
         from datetime import datetime
         
         # Check that the method exists and handles existing reminders
         import inspect
-        source = inspect.getsource(MainWindow._show_custom_reminder_dialog)
+        source = inspect.getsource(TaskController._show_custom_reminder_dialog)
         
         # Check for pre-population logic
         assert 'existing_reminder_at = task_ref.get("reminderAt")' in source
@@ -33,10 +33,10 @@ class TestCustomReminderDialog:
 
     def test_current_reminder_label_shown(self, qapp_instance):
         """6.1: Current reminder label should be shown for existing reminders."""
-        from src.frontend.main_window import MainWindow
+        from src.frontend.task_controller import TaskController
         
         import inspect
-        source = inspect.getsource(MainWindow._show_custom_reminder_dialog)
+        source = inspect.getsource(TaskController._show_custom_reminder_dialog)
         
         # Check for current reminder label
         assert 'current_reminder_label = QLabel' in source
@@ -45,10 +45,10 @@ class TestCustomReminderDialog:
 
     def test_live_preview_label(self, qapp_instance):
         """6.2: Live preview label should update in real-time."""
-        from src.frontend.main_window import MainWindow
+        from src.frontend.task_controller import TaskController
         
         import inspect
-        source = inspect.getsource(MainWindow._show_custom_reminder_dialog)
+        source = inspect.getsource(TaskController._show_custom_reminder_dialog)
         
         # Check for preview label
         assert 'preview_label = QLabel()' in source
@@ -58,10 +58,10 @@ class TestCustomReminderDialog:
 
     def test_confirmation_label(self, qapp_instance):
         """6.2: Confirmation label should appear after Set click."""
-        from src.frontend.main_window import MainWindow
+        from src.frontend.task_controller import TaskController
         
         import inspect
-        source = inspect.getsource(MainWindow._show_custom_reminder_dialog)
+        source = inspect.getsource(TaskController._show_custom_reminder_dialog)
         
         # Check for confirmation label
         assert 'confirm_label = QLabel()' in source
@@ -70,10 +70,10 @@ class TestCustomReminderDialog:
 
     def test_quickset_syncs_to_pickers(self, qapp_instance):
         """6.3: Quick-set input should sync to pickers in real-time."""
-        from src.frontend.main_window import MainWindow
+        from src.frontend.task_controller import TaskController
         
         import inspect
-        source = inspect.getsource(MainWindow._show_custom_reminder_dialog)
+        source = inspect.getsource(TaskController._show_custom_reminder_dialog)
         
         # Check for real-time sync
         assert 'duration_input.textChanged.connect' in source
@@ -81,10 +81,10 @@ class TestCustomReminderDialog:
 
     def test_explanatory_label(self, qapp_instance):
         """6.3: Explanatory label should be present."""
-        from src.frontend.main_window import MainWindow
+        from src.frontend.task_controller import TaskController
         
         import inspect
-        source = inspect.getsource(MainWindow._show_custom_reminder_dialog)
+        source = inspect.getsource(TaskController._show_custom_reminder_dialog)
         
         # Check for explanatory label
         assert 'quickset_hint = QLabel' in source

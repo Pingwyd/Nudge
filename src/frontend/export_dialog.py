@@ -35,13 +35,22 @@ from src.frontend.theme import (
     normalize_theme_id,
     refresh_glass_shells,
 )
-
-
-def _set_label_point_size(label: QLabel, point_size: int, bold: bool = False) -> None:
-    font = label.font()
-    font.setPointSize(point_size)
-    font.setBold(bold)
-    label.setFont(font)
+from src.constants import (
+    BTN_HEIGHT_LG,
+    EXPORT_COMBO_HEIGHT,
+    EXPORT_DIALOG_DEFAULT,
+    EXPORT_DIALOG_MIN,
+    EXPORT_GROUP_CARD_MARGINS,
+    EXPORT_GROUP_CARD_SPACING,
+    EXPORT_GROUP_CHECKBOX_SPACING,
+    EXPORT_GROUP_LIST_MARGINS,
+    EXPORT_GROUP_SCROLL_MAX,
+    EXPORT_GROUP_SCROLL_MIN,
+    EXPORT_SCREEN_EDGE_MARGIN,
+    MARGIN_WIDE,
+    SCROLL_AREA_MIN_HEIGHT,
+    SPACING_MD,
+)
 
 
 class ExportDialog(GlassPanelDialog):
@@ -63,20 +72,20 @@ class ExportDialog(GlassPanelDialog):
         screen = self.screen() or (QApplication.primaryScreen() if QApplication.instance() else None)
         if screen:
             available = screen.availableGeometry()
-            max_h = available.height() - 80
-            max_w = available.width() - 80
-            w = min(380, max_w)
-            h = min(420, max_h)
+            max_h = available.height() - EXPORT_SCREEN_EDGE_MARGIN
+            max_w = available.width() - EXPORT_SCREEN_EDGE_MARGIN
+            w = min(EXPORT_DIALOG_DEFAULT[0], max_w)
+            h = min(EXPORT_DIALOG_DEFAULT[1], max_h)
         else:
-            w, h = 380, 420
+            w, h = EXPORT_DIALOG_DEFAULT
         self.resize(w, h)
-        self.setMinimumSize(320, 360)
+        self.setMinimumSize(*EXPORT_DIALOG_MIN)
 
         self.bg_frame.setGeometry(0, 0, w, h)
 
         layout = QVBoxLayout(self.bg_frame)
-        layout.setContentsMargins(20, 18, 20, 18)
-        layout.setSpacing(8)
+        layout.setContentsMargins(*MARGIN_WIDE)
+        layout.setSpacing(SPACING_MD)
 
         # ── Title ──
         title = QLabel("Export Tasks")
@@ -90,7 +99,7 @@ class ExportDialog(GlassPanelDialog):
         layout.addWidget(format_label)
 
         self.format_combo = QComboBox()
-        self.format_combo.setMinimumHeight(26)
+        self.format_combo.setMinimumHeight(EXPORT_COMBO_HEIGHT)
         self.format_combo.addItem("Plain Text (.txt)", "txt")
         self.format_combo.addItem("Markdown (.md)", "md")
         self.format_combo.addItem("CSV (.csv)", "csv")
@@ -118,8 +127,8 @@ class ExportDialog(GlassPanelDialog):
             group_card = QFrame()
             group_card.setObjectName("nestedPanel")
             card_layout = QVBoxLayout(group_card)
-            card_layout.setContentsMargins(8, 6, 8, 6)
-            card_layout.setSpacing(2)
+            card_layout.setContentsMargins(*EXPORT_GROUP_CARD_MARGINS)
+            card_layout.setSpacing(EXPORT_GROUP_CARD_SPACING)
 
             self._export_all_groups_cb = QCheckBox("All groups")
             self._export_all_groups_cb.setChecked(True)
@@ -138,14 +147,14 @@ class ExportDialog(GlassPanelDialog):
             group_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             group_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             group_scroll.setStyleSheet("border: none; background: transparent;")
-            group_scroll.setMinimumHeight(36)
-            group_scroll.setMaximumHeight(110)
+            group_scroll.setMinimumHeight(EXPORT_GROUP_SCROLL_MIN)
+            group_scroll.setMaximumHeight(EXPORT_GROUP_SCROLL_MAX)
 
             group_content = QWidget()
             group_content.setObjectName("transparentSurface")
             group_cl = QVBoxLayout(group_content)
-            group_cl.setContentsMargins(14, 4, 4, 4)
-            group_cl.setSpacing(3)
+            group_cl.setContentsMargins(*EXPORT_GROUP_LIST_MARGINS)
+            group_cl.setSpacing(EXPORT_GROUP_CHECKBOX_SPACING)
 
             for g in all_groups:
                 cb = QCheckBox(g["name"])
@@ -165,10 +174,10 @@ class ExportDialog(GlassPanelDialog):
 
         # ── Action buttons ──
         buttons = QHBoxLayout()
-        buttons.setSpacing(8)
+        buttons.setSpacing(SPACING_MD)
         export_btn = QPushButton("Choose file…")
         export_btn.setObjectName("primaryButton")
-        export_btn.setMinimumHeight(32)
+        export_btn.setMinimumHeight(BTN_HEIGHT_LG)
         export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         export_btn.setDefault(True)
         export_btn.clicked.connect(self._run_export)
@@ -176,7 +185,7 @@ class ExportDialog(GlassPanelDialog):
 
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setObjectName("ghostButton")
-        cancel_btn.setMinimumHeight(32)
+        cancel_btn.setMinimumHeight(BTN_HEIGHT_LG)
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel_btn.clicked.connect(self.reject)
         buttons.addWidget(cancel_btn, 1)

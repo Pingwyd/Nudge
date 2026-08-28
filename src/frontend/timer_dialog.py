@@ -18,6 +18,25 @@ from PyQt6.QtWidgets import (
 
 from src.frontend.glass_panel_dialog import GlassPanelDialog
 from src.frontend.theme import normalize_theme_id
+from src.constants import (
+    BTN_HEIGHT_MD,
+    BTN_MIN_WIDTH_MD,
+    FONT_SIZE_TITLE_MD,
+    KEY_SEQ_EDIT_WIDTH,
+    MARGIN_STANDARD,
+    SECONDS_PER_MINUTE,
+    SPACING_LG,
+    SPACING_MD,
+    TIMER_DEFAULT_INTERVAL_S,
+    TIMER_DIALOG_BTN_HEIGHT,
+    TIMER_DIALOG_DEFAULT,
+    TIMER_DIALOG_MIN,
+    TIMER_EDIT_DIALOG_DEFAULT,
+    TIMER_EDIT_DIALOG_MIN_WIDTH,
+    TIMER_MAIN_LAYOUT_MARGINS,
+    TIMER_MAX_INTERVAL_MIN,
+    TIMER_MIN_INTERVAL_MIN,
+)
 
 
 class TimerDialog(GlassPanelDialog):
@@ -28,8 +47,8 @@ class TimerDialog(GlassPanelDialog):
         self._timer_manager = timer_manager
 
         self.setWindowTitle("Reminders \u2014 Nudge")
-        self.resize(480, 340)
-        self.setMinimumSize(400, 280)
+        self.resize(*TIMER_DIALOG_DEFAULT)
+        self.setMinimumSize(*TIMER_DIALOG_MIN)
 
         self._build_ui()
         self._refresh_list()
@@ -43,11 +62,11 @@ class TimerDialog(GlassPanelDialog):
 
     def _build_ui(self):
         layout = QVBoxLayout(self.bg_frame)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
+        layout.setContentsMargins(*TIMER_MAIN_LAYOUT_MARGINS)
+        layout.setSpacing(SPACING_LG)
 
         title = QLabel("Reminders")
-        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        title.setStyleSheet(f"font-weight: bold; font-size: {FONT_SIZE_TITLE_MD}px;")
         layout.addWidget(title)
 
         self._list = QListWidget()
@@ -55,7 +74,7 @@ class TimerDialog(GlassPanelDialog):
         layout.addWidget(self._list, 1)
 
         btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
+        btn_row.setSpacing(SPACING_MD)
 
         add_btn = QPushButton("Add")
         add_btn.setObjectName("primaryButton")
@@ -96,8 +115,8 @@ class TimerDialog(GlassPanelDialog):
         for cfg in self._timer_manager.to_list():
             status = "ON" if cfg["enabled"] else "OFF"
             repeat = "repeats" if cfg["repeat"] else "once"
-            mins = cfg["intervalSeconds"] // 60
-            secs = cfg["intervalSeconds"] % 60
+            mins = cfg["intervalSeconds"] // SECONDS_PER_MINUTE
+            secs = cfg["intervalSeconds"] % SECONDS_PER_MINUTE
             interval = f"{mins}m" if secs == 0 else f"{mins}m{secs}s"
             label = f"[{status}] {cfg['name']} \u2014 every {interval} ({repeat})"
             item = QListWidgetItem(label)
@@ -148,36 +167,36 @@ class TimerDialog(GlassPanelDialog):
 class _TimerEditDialog(GlassPanelDialog):
     """Inline form for adding or editing a single timer."""
 
-    def __init__(self, parent=None, name="", interval=300, repeat=False):
+    def __init__(self, parent=None, name="", interval=TIMER_DEFAULT_INTERVAL_S, repeat=False):
         super().__init__(parent, escape_action="reject")
 
         self.setWindowTitle("Edit Reminder \u2014 Nudge")
-        self.resize(320, 200)
-        self.setMinimumWidth(280)
+        self.resize(*TIMER_EDIT_DIALOG_DEFAULT)
+        self.setMinimumWidth(TIMER_EDIT_DIALOG_MIN_WIDTH)
 
         self._build_ui(name, interval, repeat)
         self._update_overlap_opacity()
 
     def _build_ui(self, name, interval, repeat):
         outer = QVBoxLayout(self.bg_frame)
-        outer.setContentsMargins(18, 18, 18, 18)
-        outer.setSpacing(10)
+        outer.setContentsMargins(*MARGIN_STANDARD)
+        outer.setSpacing(SPACING_LG)
 
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
-        form.setSpacing(10)
+        form.setSpacing(SPACING_LG)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         self._name_edit = QLineEdit(name or "Reminder")
-        self._name_edit.setMinimumHeight(28)
+        self._name_edit.setMinimumHeight(BTN_HEIGHT_MD)
         form.addRow("Name:", self._name_edit)
 
         self._interval_spin = QSpinBox()
-        self._interval_spin.setRange(1, 1440)
-        self._interval_spin.setValue(interval // 60 if interval >= 60 else 1)
+        self._interval_spin.setRange(TIMER_MIN_INTERVAL_MIN, TIMER_MAX_INTERVAL_MIN)
+        self._interval_spin.setValue(interval // SECONDS_PER_MINUTE if interval >= SECONDS_PER_MINUTE else TIMER_MIN_INTERVAL_MIN)
         self._interval_spin.setSuffix(" minutes")
-        self._interval_spin.setMinimumHeight(28)
-        self._interval_spin.setMinimumWidth(120)
+        self._interval_spin.setMinimumHeight(BTN_HEIGHT_MD)
+        self._interval_spin.setMinimumWidth(KEY_SEQ_EDIT_WIDTH)
         form.addRow("Every:", self._interval_spin)
 
         outer.addLayout(form)
@@ -189,20 +208,20 @@ class _TimerEditDialog(GlassPanelDialog):
         outer.addStretch()
 
         btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
+        btn_row.setSpacing(SPACING_MD)
         btn_row.addStretch()
         ok_btn = QPushButton("OK")
         ok_btn.setObjectName("primaryButton")
         ok_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        ok_btn.setFixedHeight(30)
-        ok_btn.setMinimumWidth(70)
+        ok_btn.setFixedHeight(TIMER_DIALOG_BTN_HEIGHT)
+        ok_btn.setMinimumWidth(BTN_MIN_WIDTH_MD)
         ok_btn.clicked.connect(self.accept)
         btn_row.addWidget(ok_btn)
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setObjectName("primaryButton")
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        cancel_btn.setFixedHeight(30)
-        cancel_btn.setMinimumWidth(70)
+        cancel_btn.setFixedHeight(TIMER_DIALOG_BTN_HEIGHT)
+        cancel_btn.setMinimumWidth(BTN_MIN_WIDTH_MD)
         cancel_btn.clicked.connect(self.reject)
         btn_row.addWidget(cancel_btn)
         outer.addLayout(btn_row)
@@ -211,7 +230,7 @@ class _TimerEditDialog(GlassPanelDialog):
         return self._name_edit.text().strip() or "Reminder"
 
     def interval(self) -> int:
-        return self._interval_spin.value() * 60
+        return self._interval_spin.value() * SECONDS_PER_MINUTE
 
     def repeat(self) -> bool:
         return self._repeat_cb.isChecked()

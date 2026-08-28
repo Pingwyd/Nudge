@@ -32,7 +32,7 @@ def open_file_explorer(path: str | Path) -> None:
         subprocess.Popen(["xdg-open", path])
 
 
-def open_url(url: str) -> None:
+def open_url(url: str) -> bool:
     """Open a URL in the default browser with platform fallback."""
     opened = webbrowser.open(url)
     if not opened:
@@ -42,3 +42,5 @@ def open_url(url: str) -> None:
             subprocess.Popen(["open", url])
         else:
             subprocess.Popen(["xdg-open", url])
+        opened = True
+    return opened

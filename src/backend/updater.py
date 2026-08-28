@@ -87,6 +87,7 @@ def _ps_download(url, dest_path, timeout=120, progress_callback=None):
     if not is_windows():
         raise RuntimeError("PowerShell download fallback is Windows-only")
     ps_script = f"""
+Add-Type -AssemblyName System.Net.Http
 $url = '{url.replace("'", "''")}'
 $dest = '{str(dest_path).replace("'", "''")}'
 try {{
@@ -340,6 +341,90 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
         "  \u2022 Fixed file lock errors when retrying a failed download\n"
         "  \u2022 PowerShell download now shows progress instead of blocking\n"
         "  \u2022 Progress bar no longer cycles back to 0% after 100MB"
+    ),
+    "1.13.0": (
+        "\u2705 Task Area Redesign\n"
+        "  \u2022 Checkboxes to mark tasks complete\n"
+        "  \u2022 Due dates with colored chips\n"
+        "  \u2022 Priority indicators (High priority shows red)\n"
+        "  \u2022 Tags with 8-color palette picker\n"
+        "  \u2022 Recurring tasks (daily, weekly, monthly)\n"
+        "  \u2022 Tag filter dropdown in title bar\n"
+        "\n"
+        "\ud83d\udce6 Settings & Polish\n"
+        "  \u2022 Font selection for task text\n"
+        "  \u2022 History retention setting (5 days to Forever)\n"
+        "  \u2022 Reminders popup (Alt+R)\n"
+        "  \u2022 Footer bar with task count and History shortcut\n"
+        "  \u2022 Button styles unified across all dialogs\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Dropdown menus now inherit theme colors properly\n"
+        "  \u2022 Tag color picker closes when clicking outside\n"
+        "  \u2022 Crash dialog emoji no longer clipped\n"
+        "  \u2022 Settings remembers last tab\n"
+        "  \u2022 Badges no longer clip at minimum window size\n"
+        "  \u2022 Glass panel drag is now smoother"
+    ),
+    "1.14.0": (
+        "\u2728 New Features\n"
+        "  \u2022 Flat list priority view with HIGH PRIORITY header and divider\n"
+        "  \u2022 Drag-and-drop import \u2014 drop text, URLs, or files to create tasks\n"
+        "  \u2022 Drop indicator overlay shows the drop zone during drag\n"
+        "\n"
+        "\ud83d\udce6 Improvements\n"
+        "  \u2022 History shortcut (Ctrl+H) now toggles \u2014 closes dialog if open\n"
+        "  \u2022 Reminders shortcut (Alt+R) configurable in Settings\n"
+        "  \u2022 Footer restyled with visible border and theme-aware colors\n"
+        "  \u2022 Shortcut suppression only applies when input bar has focus\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 History shortcut no longer blocked by dialog search bars\n"
+        "  \u2022 Reminders dialog no longer stacks on repeated presses\n"
+        "  \u2022 Footer border visible in all themes (dark, light, OLED)\n"
+        "  \u2022 Footer task count readable in light mode"
+    ),
+    "2.0.0": (
+        "\u2728 New Features\n"
+        "  \u2022 Clipboard import \u2014 Ctrl+Shift+V to paste multiple tasks at once\n"
+        "  \u2022 Completion sound effects (toggle in Settings \u2192 Sound)\n"
+        "  \u2022 Stats bar in History \u2014 total, today, and yesterday counts\n"
+        "  \u2022 Card-style task rows in History with rounded corners\n"
+        "  \u2022 Collapse chevrons on History time period sections\n"
+        "  \u2022 Ctrl+F to focus the tag filter dropdown\n"
+        "  \u2022 Real-time task search from the title bar\n"
+        "\n"
+        "\ud83d\udce6 Improvements\n"
+        "  \u2022 History sorted most-recent-first within each time period\n"
+        "  \u2022 Smaller, better-proportioned buttons in confirmation dialogs\n"
+        "  \u2022 20 UI files cleaned up with centralized constants\n"
+        "  \u2022 Bold divider after last high-priority task\n"
+        "  \u2022 HIGH PRIORITY header auto-removes when all tasks completed\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 History count badge updates on delete\n"
+        "  \u2022 History tab updates live when tasks completed while open\n"
+        "  \u2022 Footer task count updates on task add/remove\n"
+        "  \u2022 Confirmation dialog buttons no longer clipped\n"
+        "  \u2022 Group dropdown populates correctly on restart"
+    ),
+    "2.0.1": (
+        "\u2728 New Features\n"
+        "  \u2022 Task search bar \u2014 Ctrl+F with scope filters for tasks, groups, and tags\n"
+        "  \u2022 Tray quick-add \u2014 add tasks from the system tray menu\n"
+        "  \u2022 Dim overlay for search and modal focus states\n"
+        "\n"
+        "\ud83d\udce6 Improvements\n"
+        "  \u2022 Faster theme and settings appearance changes\n"
+        "  \u2022 Smoother window resize (deferred text reflow)\n"
+        "  \u2022 Debounced disk writes for tasks and app state\n"
+        "\n"
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Pin to desktop survives Win+D and HWND recreation\n"
+        "  \u2022 Tray toggle hotkey works after layer changes\n"
+        "  \u2022 Flat view shows tasks on first boot\n"
+        "  \u2022 No ghost window frames at startup\n"
+        "  \u2022 Group search filters tasks in-place per group"
     ),
 }
 
