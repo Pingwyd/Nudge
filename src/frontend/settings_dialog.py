@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from PyQt6.QtCore import QEvent, Qt
+from PyQt6.QtCore import QEvent, Qt, QTimer
 from PyQt6.QtGui import QColor, QKeySequence
 from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame,
                              QGraphicsDropShadowEffect, QHBoxLayout,
@@ -38,6 +38,7 @@ from src.constants import (BTN_HEIGHT_LG, BTN_HEIGHT_MD,
                            MARGIN_SETTINGS_TAB, OPACITY_DIVISOR,
                            OPACITY_SLIDER_MAX, OPACITY_SLIDER_MIN,
                            RADIUS_PANEL, SCROLL_AREA_MAX_HEIGHT,
+                           TEXT_SIZE_LAYOUT_DEBOUNCE_MS,
                            SCROLL_AREA_MIN_HEIGHT, SETTINGS_APPEARANCE_TAB_SPACING,
                            SETTINGS_EXPORT_GROUP_CONTENT_MARGINS,
                            SETTINGS_GLOW_BLUR_RADIUS,
@@ -53,7 +54,8 @@ from src.frontend.glass_panel_dialog import GlassPanelDialog
 from src.frontend.theme import (get_theme, normalize_theme_id,
                                 refresh_glass_shells,
                                 settings_scroll_area_stylesheet)
-from src.frontend.theme_widgets import (SettingsCardWidget, ThemeCardWidget,
+from src.frontend.theme_widgets import (AutoThemeCardWidget,
+                                        SettingsCardWidget, ThemeCardWidget,
                                         ToggleSwitchRow, ToggleSwitchWidget)
 from src.frontend.themed_message_dialog import ThemedMessageDialog
 from src.frontend.utils import set_label_point_size
@@ -74,6 +76,10 @@ class SettingsDialog(GlassPanelDialog):
         self.export_shortcut_edit = None
         self.reminders_shortcut_edit = None
         self._chrome = None
+        self._text_size_layout_timer = QTimer(self)
+        self._text_size_layout_timer.setSingleShot(True)
+        self._text_size_layout_timer.setInterval(TEXT_SIZE_LAYOUT_DEBOUNCE_MS)
+        self._text_size_layout_timer.timeout.connect(self._flush_text_size_layouts)
         self.init_ui()
 
     def _build_snapshot(self):
@@ -110,7 +116,14 @@ class SettingsDialog(GlassPanelDialog):
 
     def _auto_save_appearance(self):
         """Persist appearance settings to disk immediately."""
-        self.state_manager.state["theme"] = self._get_selected_theme()
+        selected = self._get_selected_theme()
+        if selected == "auto":
+            from src.backend.state_manager import detect_os_theme
+            self.state_manager.state["theme"] = detect_os_theme()
+            self.state_manager.state["followOsTheme"] = True
+        else:
+            self.state_manager.state["theme"] = selected
+            self.state_manager.state["followOsTheme"] = False
         if hasattr(self, 'text_size_slider'):
             self.state_manager.state["taskTextSize"] = self.text_size_slider.value()
         if hasattr(self, 'opacity_slider'):
@@ -127,23 +140,85 @@ class SettingsDialog(GlassPanelDialog):
                 self.save_btn.setEnabled(False)
 
     def _select_theme(self, theme_id):
-        for tid, card in self._theme_cards.items():
-            card.set_selected(tid == theme_id)
-            card.update_theme(theme_id)
-        for card in getattr(self, '_settings_cards', []):
-            card.update_theme(theme_id)
-        self._apply_entry_widget_theming(theme_id)
+        """Update selection immediately, then apply the heavy theme work async."""
+        if theme_id == "auto":
+            from src.backend.state_manager import detect_os_theme
+            resolved = detect_os_theme()
+            self.state_manager.state["followOsTheme"] = True
+            for tid, card in self._theme_cards.items():
+                card.set_selected(tid == "auto")
+            follow_os = True
+            apply_id = resolved
+        else:
+            self.state_manager.state["followOsTheme"] = False
+            for tid, card in self._theme_cards.items():
+                card.set_selected(tid == theme_id)
+            follow_os = False
+            apply_id = theme_id
+
+        # Paint the new selection border before the expensive app restyle.
+        QApplication.processEvents()
+
         parent = self.parent()
         if parent and hasattr(parent, "app_state"):
-            parent.app_state["theme"] = theme_id
-            parent.apply_app_theme()
+            parent.app_state["theme"] = apply_id
+            parent.app_state["followOsTheme"] = follow_os
+
+        # Coalesce rapid theme clicks into one apply.
+        self._pending_theme_id = apply_id
+        if not hasattr(self, "_theme_apply_timer"):
+            self._theme_apply_timer = QTimer(self)
+            self._theme_apply_timer.setSingleShot(True)
+            self._theme_apply_timer.setInterval(0)
+            self._theme_apply_timer.timeout.connect(self._flush_pending_theme)
+        self._theme_apply_timer.start()
         self._auto_save_appearance()
+
+    def _flush_pending_theme(self):
+        theme_id = getattr(self, "_pending_theme_id", None)
+        if not theme_id:
+            return
+        self._pending_theme_id = None
+
+        # Local settings chrome first (instant feedback in this dialog).
+        for tid, card in self._theme_cards.items():
+            card.update_theme(theme_id)
+        for card in getattr(self, "_settings_cards", []):
+            card.update_theme(theme_id)
+        self._apply_entry_widget_theming(theme_id)
+        self.update()
+        QApplication.processEvents()
+
+        # Apply the app-wide stylesheet on the next tick so this dialog
+        # has already painted in the new theme before the heavier restyle.
+        QTimer.singleShot(0, lambda tid=theme_id: self._apply_parent_theme(tid))
+
+    def _apply_parent_theme(self, theme_id: str) -> None:
+        parent = self.parent()
+        if not (parent and hasattr(parent, "apply_app_theme")):
+            return
+        self._suppress_theme_echo = True
+        try:
+            parent.apply_app_theme()
+        finally:
+            self._suppress_theme_echo = False
 
     def _get_selected_theme(self):
         for tid, card in self._theme_cards.items():
             if card._selected:
                 return tid
-        return "dark"
+        return "auto"
+
+    def _on_parent_theme_applied(self, theme_id: str) -> None:
+        if getattr(self, "_suppress_theme_echo", False):
+            return
+        follow_os = self.state_manager.state.get("followOsTheme", True)
+        for tid, card in self._theme_cards.items():
+            card.set_selected((tid == "auto" and follow_os) or (tid != "auto" and tid == theme_id and not follow_os))
+            card.update_theme(theme_id)
+        for card in getattr(self, '_settings_cards', []):
+            card.update_theme(theme_id)
+        self._apply_entry_widget_theming(theme_id)
 
     def _validate_shortcuts(self):
         all_shortcuts = [
@@ -203,7 +278,7 @@ class SettingsDialog(GlassPanelDialog):
         self.boot_notification_cb.setChecked(True)
 
     def _reset_appearance_tab_defaults(self):
-        self._select_theme("dark")
+        self._select_theme("auto")
         self.text_size_slider.setValue(FONT_SIZE_TITLE_MD)
         self.opacity_slider.setValue(OPACITY_SLIDER_MAX)
 
@@ -357,18 +432,32 @@ class SettingsDialog(GlassPanelDialog):
         theme_cards_layout.setSpacing(SPACING_SM)
         self._theme_cards = {}
         saved_theme = normalize_theme_id(self.state_manager.state.get("theme", "dark"))
+        follow_os = self.state_manager.state.get("followOsTheme", True)
+
+        # Auto (follow OS) card
+        auto_card = AutoThemeCardWidget()
+        auto_card.mousePressEvent = lambda _: self._select_theme("auto")
+        theme_cards_layout.addWidget(auto_card)
+        self._theme_cards["auto"] = auto_card
+
         for tid in ["dark", "light", "oled"]:
             colors = get_theme(tid)["colors"]
             card = ThemeCardWidget(tid, tid.capitalize(), colors)
             card.mousePressEvent = lambda _, t=tid: self._select_theme(t)
             theme_cards_layout.addWidget(card)
             self._theme_cards[tid] = card
-        self._theme_cards[saved_theme].set_selected(True)
+
+        actual_theme = saved_theme
+        if follow_os:
+            from src.backend.state_manager import detect_os_theme
+            actual_theme = detect_os_theme()
         for tid, card in self._theme_cards.items():
-            card.update_theme(saved_theme)
+            selected = (tid == "auto" and follow_os) or (tid != "auto" and tid == saved_theme and not follow_os)
+            card.set_selected(selected)
+            card.update_theme(actual_theme)
         for card in getattr(self, '_settings_cards', []):
-            card.update_theme(saved_theme)
-        self._initial_theme = saved_theme
+            card.update_theme(actual_theme)
+        self._initial_theme = actual_theme
         theme_cards_layout.addStretch()
         appearance_layout.addLayout(theme_cards_layout)
 
@@ -521,19 +610,19 @@ class SettingsDialog(GlassPanelDialog):
 
             if attr_name == "toggle_tray_shortcut_edit":
                 def _on_tray_edit_focus(in_focus, _edit=edit):
-                    parent = self.parent()
-                    if parent is None:
+                    if getattr(self, "_closing", False):
                         return
+                    parent = self.parent()
+                    if parent is None or not hasattr(parent, "_shortcut_manager"):
+                        return
+                    sm = parent._shortcut_manager
                     if in_focus:
-                        if parent._tray_hotkey_id is not None:
-                            parent._hotkey_filter.unregister(parent._tray_hotkey_id)
-                            parent._tray_hotkey_id = None
+                        sm.suspend_tray_hotkey()
                     else:
-                        new_seq = _edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText)
-                        if new_seq:
-                            hid = parent._hotkey_filter.register(new_seq, parent._toggle_tray_visibility)
-                            if hid is not None:
-                                parent._tray_hotkey_id = hid
+                        new_seq = _edit.keySequence().toString(
+                            QKeySequence.SequenceFormat.PortableText
+                        )
+                        sm.resume_tray_hotkey(new_seq or None)
                 edit.installEventFilter(self)
                 edit._tray_focus_handler = _on_tray_edit_focus
             card_layout.addWidget(edit, 0, Qt.AlignmentFlag.AlignRight)
@@ -854,19 +943,12 @@ class SettingsDialog(GlassPanelDialog):
         c = theme["colors"]
         r = theme["radii"]
         input_r = r.get("input", r.get("small", 4))
-        glass_bg = c.get("glass_start", "rgba(30,30,30,220)")
-        for frame in self.findChildren(QFrame):
-            if frame.objectName() == "nestedPanel":
-                frame.setStyleSheet(f"""
-                    background: {c.get("input_bg", "rgba(0,0,0,40)")};
-                    border: none;
-                    border-radius: {input_r}px;
-                """)
-        for sa in self.findChildren(QScrollArea):
-            sa.setStyleSheet(settings_scroll_area_stylesheet(theme))
-            widget = sa.widget()
-            if widget:
-                widget.setStyleSheet("background: transparent;")
+        nested_css = f"""
+            background: {c.get("input_bg", "rgba(0,0,0,40)")};
+            border: none;
+            border-radius: {input_r}px;
+        """
+        scroll_css = settings_scroll_area_stylesheet(theme)
         input_css = f"""
             background: {c.get("input_bg", "rgba(0,0,0,40)")};
             border: 1px solid {c.get("border", "rgba(255,255,255,60)")};
@@ -874,18 +956,20 @@ class SettingsDialog(GlassPanelDialog):
             color: {c.get("text", "#ffffff")};
             padding: 4px 8px;
         """
+        for frame in self.findChildren(QFrame):
+            if frame.objectName() == "nestedPanel":
+                frame.setStyleSheet(nested_css)
+        for sa in self.findChildren(QScrollArea):
+            sa.setStyleSheet(scroll_css)
+            widget = sa.widget()
+            if widget:
+                widget.setStyleSheet("background: transparent;")
         for w in self.findChildren(QKeySequenceEdit):
             w.setStyleSheet(input_css)
         for w in self.findChildren(QComboBox):
             w.setStyleSheet(input_css)
-            from src.frontend.theme import _style_all_combo_views, combo_popup_view_stylesheet
-            view = w.view()
-            if view:
-                view_css = combo_popup_view_stylesheet(theme)
-                view.setStyleSheet(view_css)
-                popup_win = view.window()
-                if popup_win is not None:
-                    popup_win.setStyleSheet(view_css)
+        # One app-wide pass is enough — avoid per-combo popup restyle here.
+        from src.frontend.theme import _style_all_combo_views
         _style_all_combo_views(theme)
 
     def _on_pin_to_desktop_toggled(self, checked: bool):
@@ -1073,16 +1157,40 @@ class SettingsDialog(GlassPanelDialog):
         if not self._validate_shortcuts():
             return False
 
+        parent = self.parent()
+        prev_pin = bool(self.state_manager.state.get("pinnedToDesktop", False))
+        prev_aot = bool(self.state_manager.state.get("alwaysOnTop", False))
+        prev_shortcuts = {
+            "historyShortcut": self.state_manager.state.get("historyShortcut"),
+            "settingsShortcut": self.state_manager.state.get("settingsShortcut"),
+            "pinShortcut": self.state_manager.state.get("pinShortcut"),
+            "toggleTrayShortcut": self.state_manager.state.get("toggleTrayShortcut"),
+            "alwaysOnTopShortcut": self.state_manager.state.get("alwaysOnTopShortcut"),
+            "exportShortcut": self.state_manager.state.get("exportShortcut"),
+            "remindersShortcut": self.state_manager.state.get("remindersShortcut"),
+        }
+
         self.state_manager.set_run_on_startup(self.startup_cb.isChecked())
         self.state_manager.state["positionLocked"] = self.lock_cb.isChecked()
         self.state_manager.state["pinnedToDesktop"] = self.pin_cb.isChecked()
         self.state_manager.state["alwaysOnTop"] = self.always_on_top_cb.isChecked()
-        parent = self.parent()
         reconcile_layer_settings(self.state_manager.state)
-        if parent is not None and hasattr(parent, "_apply_window_layer"):
+        layer_changed = (
+            bool(self.state_manager.state.get("pinnedToDesktop", False)) != prev_pin
+            or bool(self.state_manager.state.get("alwaysOnTop", False)) != prev_aot
+        )
+        if layer_changed and parent is not None and hasattr(parent, "_apply_window_layer"):
             parent._apply_window_layer()
 
-        self.state_manager.state["theme"] = normalize_theme_id(self._get_selected_theme())
+        selected = self._get_selected_theme()
+        if selected == "auto":
+            from src.backend.state_manager import detect_os_theme
+            resolved = detect_os_theme()
+            self.state_manager.state["followOsTheme"] = True
+            self.state_manager.state["theme"] = resolved
+        else:
+            self.state_manager.state["followOsTheme"] = False
+            self.state_manager.state["theme"] = normalize_theme_id(selected)
         opacity = self.opacity_slider.value() / OPACITY_DIVISOR
         self.state_manager.state["opacity"] = opacity
         self.state_manager.state["taskTextSize"] = self.text_size_slider.value()
@@ -1108,7 +1216,20 @@ class SettingsDialog(GlassPanelDialog):
         self._has_unsaved_changes = False
         self.save_btn.setEnabled(False)
 
-        if parent is not None and hasattr(parent, '_shortcut_manager'):
+        new_shortcuts = {
+            "historyShortcut": self.state_manager.state.get("historyShortcut"),
+            "settingsShortcut": self.state_manager.state.get("settingsShortcut"),
+            "pinShortcut": self.state_manager.state.get("pinShortcut"),
+            "toggleTrayShortcut": self.state_manager.state.get("toggleTrayShortcut"),
+            "alwaysOnTopShortcut": self.state_manager.state.get("alwaysOnTopShortcut"),
+            "exportShortcut": self.state_manager.state.get("exportShortcut"),
+            "remindersShortcut": self.state_manager.state.get("remindersShortcut"),
+        }
+        if (
+            prev_shortcuts != new_shortcuts
+            and parent is not None
+            and hasattr(parent, "_shortcut_manager")
+        ):
             parent._shortcut_manager.update_shortcuts()
 
         if parent is not None and hasattr(parent, "task_row_widgets"):
@@ -1127,7 +1248,7 @@ class SettingsDialog(GlassPanelDialog):
                 parent.task_text_size = int(self.state_manager.state.get("taskTextSize", FONT_SIZE_TITLE_MD))
                 for row in parent.task_row_widgets.values():
                     if hasattr(row, "set_text_size"):
-                        row.set_text_size(parent.task_text_size)
+                        row.set_text_size(parent.task_text_size, sync=False)
                 parent._sync_task_row_text_layouts()
             # Apply tag filter toggle immediately
             if hasattr(parent, "_update_empty_state"):
@@ -1135,16 +1256,6 @@ class SettingsDialog(GlassPanelDialog):
             parent.setUpdatesEnabled(True)
             parent.update()
             self._initial_theme = normalize_theme_id(self.state_manager.state.get("theme", "dark"))
-
-        refresh_glass_shells(
-            self,
-            normalize_theme_id(self.state_manager.state.get("theme", "dark")),
-        )
-        if parent is not None:
-            refresh_glass_shells(
-                parent,
-                normalize_theme_id(self.state_manager.state.get("theme", "dark")),
-            )
 
         self._apply_entry_widget_theming()
 
@@ -1161,13 +1272,28 @@ class SettingsDialog(GlassPanelDialog):
         self._auto_save_appearance()
 
     def _emit_text_size_to_parent(self, value):
+        """Live-update row fonts without rebuilding the task list."""
         parent = self.parent()
         if parent is not None and hasattr(parent, "task_text_size"):
             parent.task_text_size = value
             parent.state_manager.state["taskTextSize"] = value
-            if hasattr(parent, "render_tasks"):
-                parent.render_tasks()
+            parent.app_state["taskTextSize"] = value
+            rows = getattr(parent, "task_row_widgets", None)
+            if rows:
+                parent.setUpdatesEnabled(False)
+                try:
+                    for row in rows.values():
+                        if hasattr(row, "set_text_size"):
+                            row.set_text_size(value, sync=False)
+                finally:
+                    parent.setUpdatesEnabled(True)
+                self._text_size_layout_timer.start()
         self._auto_save_appearance()
+
+    def _flush_text_size_layouts(self):
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "_sync_task_row_text_layouts"):
+            parent._sync_task_row_text_layouts()
 
     def _on_mouse_glow_toggled(self, checked):
         parent = self.parent()
@@ -1190,20 +1316,30 @@ class SettingsDialog(GlassPanelDialog):
         return self._build_snapshot() != self._saved_snapshot
 
     def closeEvent(self, event):
-        if self.has_unsaved_changes():
-            if ThemedMessageDialog.question(
-                self,
-                "Unsaved Changes",
-                "You have unsaved changes, do you want to save them?",
-                default_yes=False,
-            ):
-                if not self.save_changes():
-                    event.ignore()
+        self._closing = True
+        try:
+            if self.has_unsaved_changes():
+                if ThemedMessageDialog.question(
+                    self,
+                    "Unsaved Changes",
+                    "You have unsaved changes, do you want to save them?",
+                    default_yes=False,
+                ):
+                    if not self.save_changes():
+                        self._closing = False
+                        event.ignore()
+                        return
+                else:
+                    event.accept()
+                    self.reject()
                     return
-            else:
-                event.accept()
-                self.reject()
-                return
 
-        event.accept()
-        self.reject()
+            event.accept()
+            self.reject()
+        finally:
+            # Always restore tray hotkey from the main window's saved chord.
+            parent = self.parent()
+            if parent is not None and hasattr(parent, "_shortcut_manager"):
+                parent._shortcut_manager.resume_tray_hotkey(
+                    parent.app_state.get("toggleTrayShortcut")
+                )

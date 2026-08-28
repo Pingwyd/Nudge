@@ -33,12 +33,12 @@ DARK_THEME: Dict[str, Any] = {
         "chrome_separator": "rgba(255, 255, 255, 25)",
         "tab_bg": "rgba(255, 255, 255, 20)",
         "tab_selected": "rgba(255, 255, 255, 45)",
-        "group_header_bg": "rgba(255, 255, 255, 18)",
-        "group_header_border": "rgba(255, 255, 255, 45)",
-        "group_header_hover": "rgba(255, 255, 255, 32)",
-        "accent_button_bg": "rgba(255, 255, 255, 25)",
+        "group_header_bg": "rgba(255, 255, 255, 28)",
+        "group_header_border": "rgba(255, 255, 255, 55)",
+        "group_header_hover": "rgba(255, 255, 255, 40)",
+        "accent_button_bg": "rgba(245, 166, 35, 35)",
         "checkbox_indicator": "rgba(0, 0, 0, 40)",
-        "checkbox_checked": "rgba(255, 255, 255, 150)",
+        "checkbox_checked": "#F5A623",
         "checkbox_border": "rgba(255, 255, 255, 100)",
         "danger_bg": "rgba(255, 50, 50, 40)",
         "danger_border": "rgba(255, 50, 50, 80)",
@@ -49,18 +49,31 @@ DARK_THEME: Dict[str, Any] = {
         "tooltip_bg": "rgba(30, 30, 30, 240)",
         "tooltip_border": "rgba(255, 255, 255, 70)",
         "separator": "rgba(255, 255, 255, 35)",
-        "drop_indicator": "rgba(255, 255, 255, 220)",
+        "drop_indicator": "#F5A623",
         "glass_overlap_solid": "rgba(18, 18, 18, 255)",
-        "accent": "#4fc3f7",
+        # Warm amber accent — meaning only (CTAs, focus, priority, active states)
+        "accent": "#F5A623",
+        "accent_hover": "#FFB83D",
+        "accent_pressed": "#E09515",
+        "on_accent": "#1A1205",
         "muted": "#666666",
-        "toggle_on": "#4fc3f7",
+        "toggle_on": "#F5A623",
         "toggle_off": "#666666",
-        "input_focus_glow": "0 0 8px rgba(79, 195, 247, 0.2)",
+        "input_focus_glow": "0 0 8px rgba(245, 166, 35, 0.28)",
         "dialog_shadow": "0 8px 32px rgba(0, 0, 0, 0.4)",
-        "priority_header_bg": "rgba(79, 195, 247, 25)",
-        "priority_header_text": "#4fc3f7",
-        "priority_divider": "rgba(79, 195, 247, 60)",
-        "section_divider": "rgba(255, 255, 255, 80)",
+        "priority_header_bg": "rgba(245, 166, 35, 25)",
+        "priority_header_text": "#F5A623",
+        "priority_divider": "rgba(245, 166, 35, 60)",
+        # Amber-tinted thick divider on last priority-block task
+        "section_divider": "rgba(245, 166, 35, 90)",
+        # Coral — due/overdue/warning (never share amber's role)
+        "warning": "#FF6B5C",
+        "overdue": "#FF6B5C",
+        "due_soon": "#FF8A7A",
+        "search_match_bg": "rgba(245, 166, 35, 45)",
+        "tag_feature": "#F5A623",
+        "tag_neutral": "#90A4AE",
+        "icon": "#ffffff",
     },
     "radii": {
         "window": 20,
@@ -75,6 +88,16 @@ DARK_THEME: Dict[str, Any] = {
     "fonts": {
         "family": "",
         "size_input": 14,
+        "size_ui": 13,
+        "size_title": 14,
+        "weight_task": 500,
+        "weight_header": 500,
+    },
+    "spacing": {
+        "row_padding_v": 9,
+        "row_padding_h_left": 12,
+        "row_padding_h_right": 8,
+        "checkbox_size": 20,
     },
 }
 
@@ -99,12 +122,12 @@ LIGHT_THEME: Dict[str, Any] = {
         "chrome_icon": "#2c2c2e",
         "tab_bg": "rgba(255, 255, 255, 150)",
         "tab_selected": "rgba(255, 255, 255, 235)",
-        "group_header_bg": "rgba(255, 255, 255, 190)",
-        "group_header_border": "rgba(0, 0, 0, 40)",
-        "group_header_hover": "rgba(255, 255, 255, 225)",
-        "accent_button_bg": "rgba(255, 255, 255, 210)",
+        "group_header_bg": "rgba(255, 255, 255, 220)",
+        "group_header_border": "rgba(0, 0, 0, 48)",
+        "group_header_hover": "rgba(255, 255, 255, 240)",
+        "accent_button_bg": "rgba(201, 133, 10, 28)",
         "checkbox_indicator": "rgba(255, 255, 255, 190)",
-        "checkbox_checked": "rgba(44, 44, 46, 200)",
+        "checkbox_checked": "#C9850A",
         "checkbox_border": "rgba(0, 0, 0, 55)",
         "danger_bg": "rgba(255, 80, 80, 55)",
         "danger_border": "rgba(200, 40, 40, 90)",
@@ -115,21 +138,32 @@ LIGHT_THEME: Dict[str, Any] = {
         "tooltip_bg": "rgba(252, 252, 255, 250)",
         "tooltip_border": "rgba(0, 0, 0, 35)",
         "separator": "rgba(0, 0, 0, 40)",
-        "drop_indicator": "rgba(44, 44, 46, 220)",
+        "drop_indicator": "#C9850A",
         "glass_overlap_solid": "rgba(248, 248, 250, 255)",
-        "accent": "#007AFF",
+        "accent": "#C9850A",
+        "accent_hover": "#D99412",
+        "accent_pressed": "#A86F08",
+        "on_accent": "#1A1205",
         "muted": "#8e8e93",
-        "toggle_on": "#007AFF",
+        "toggle_on": "#C9850A",
         "toggle_off": "#c7c7cc",
-        "input_focus_glow": "0 0 6px rgba(0, 122, 255, 0.15)",
+        "input_focus_glow": "0 0 6px rgba(201, 133, 10, 0.22)",
         "dialog_shadow": "0 4px 16px rgba(0, 0, 0, 0.15)",
-        "priority_header_bg": "rgba(0, 122, 255, 20)",
-        "priority_header_text": "#007AFF",
-        "priority_divider": "rgba(0, 122, 255, 50)",
-        "section_divider": "rgba(0, 0, 0, 80)",
+        "priority_header_bg": "rgba(201, 133, 10, 22)",
+        "priority_header_text": "#C9850A",
+        "priority_divider": "rgba(201, 133, 10, 55)",
+        "section_divider": "rgba(201, 133, 10, 85)",
+        "warning": "#E85A4C",
+        "overdue": "#E85A4C",
+        "due_soon": "#F0786A",
+        "search_match_bg": "rgba(201, 133, 10, 40)",
+        "tag_feature": "#C9850A",
+        "tag_neutral": "#8E8E93",
+        "icon": "#2c2c2e",
     },
     "radii": deepcopy(DARK_THEME["radii"]),
     "fonts": deepcopy(DARK_THEME["fonts"]),
+    "spacing": deepcopy(DARK_THEME["spacing"]),
 }
 
 # --- OLED theme tokens (pure black background for OLED displays) --------------------
@@ -152,12 +186,12 @@ OLED_THEME: Dict[str, Any] = {
         "chrome_separator": "rgba(255, 255, 255, 18)",
         "tab_bg": "rgba(255, 255, 255, 12)",
         "tab_selected": "rgba(255, 255, 255, 30)",
-        "group_header_bg": "rgba(255, 255, 255, 10)",
-        "group_header_border": "rgba(255, 255, 255, 30)",
-        "group_header_hover": "rgba(255, 255, 255, 22)",
-        "accent_button_bg": "rgba(255, 255, 255, 18)",
+        "group_header_bg": "rgba(255, 255, 255, 18)",
+        "group_header_border": "rgba(255, 255, 255, 40)",
+        "group_header_hover": "rgba(255, 255, 255, 28)",
+        "accent_button_bg": "rgba(245, 166, 35, 28)",
         "checkbox_indicator": "rgba(255, 255, 255, 25)",
-        "checkbox_checked": "rgba(255, 255, 255, 140)",
+        "checkbox_checked": "#F5A623",
         "checkbox_border": "rgba(255, 255, 255, 80)",
         "danger_bg": "rgba(255, 40, 40, 35)",
         "danger_border": "rgba(255, 40, 40, 70)",
@@ -168,21 +202,32 @@ OLED_THEME: Dict[str, Any] = {
         "tooltip_bg": "rgba(20, 20, 20, 245)",
         "tooltip_border": "rgba(255, 255, 255, 50)",
         "separator": "rgba(255, 255, 255, 25)",
-        "drop_indicator": "rgba(255, 255, 255, 200)",
+        "drop_indicator": "#F5A623",
         "glass_overlap_solid": "rgba(0, 0, 0, 255)",
-        "accent": "#4fc3f7",
+        "accent": "#F5A623",
+        "accent_hover": "#FFB83D",
+        "accent_pressed": "#E09515",
+        "on_accent": "#1A1205",
         "muted": "#666666",
-        "toggle_on": "#4fc3f7",
+        "toggle_on": "#F5A623",
         "toggle_off": "#666666",
-        "input_focus_glow": "0 0 8px rgba(79, 195, 247, 0.25)",
+        "input_focus_glow": "0 0 8px rgba(245, 166, 35, 0.3)",
         "dialog_shadow": "0 8px 32px rgba(0, 0, 0, 0.6)",
-        "priority_header_bg": "rgba(79, 195, 247, 20)",
-        "priority_header_text": "#4fc3f7",
-        "priority_divider": "rgba(79, 195, 247, 50)",
-        "section_divider": "rgba(255, 255, 255, 70)",
+        "priority_header_bg": "rgba(245, 166, 35, 20)",
+        "priority_header_text": "#F5A623",
+        "priority_divider": "rgba(245, 166, 35, 50)",
+        "section_divider": "rgba(245, 166, 35, 85)",
+        "warning": "#FF6B5C",
+        "overdue": "#FF6B5C",
+        "due_soon": "#FF8A7A",
+        "search_match_bg": "rgba(245, 166, 35, 45)",
+        "tag_feature": "#F5A623",
+        "tag_neutral": "#90A4AE",
+        "icon": "#ffffff",
     },
     "radii": deepcopy(DARK_THEME["radii"]),
     "fonts": deepcopy(DARK_THEME["fonts"]),
+    "spacing": deepcopy(DARK_THEME["spacing"]),
 }
 
 THEME_BY_ID: Dict[str, Dict[str, Any]] = {
@@ -210,8 +255,52 @@ def _chrome_button_color(theme: Dict[str, Any]) -> str:
     return theme["colors"].get("chrome_icon", _c(theme, "text"))
 
 
+def _icon_asset_path(icon_type: str) -> Path | None:
+    """Resolve ``src/assets/icons/{icon_type}.svg`` (source or frozen)."""
+    import sys
+    from pathlib import Path
+
+    roots: list[Path] = []
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        roots.append(Path(sys._MEIPASS) / "src" / "assets" / "icons")
+        roots.append(Path(sys._MEIPASS) / "assets" / "icons")
+    # theme.py → frontend → src → project; assets live under src/assets
+    here = Path(__file__).resolve().parent  # src/frontend
+    roots.append(here.parent / "assets" / "icons")
+    for root in roots:
+        candidate = root / f"{icon_type}.svg"
+        try:
+            if candidate.is_file():
+                return candidate
+        except OSError:
+            continue
+    return None
+
+
+def load_icon_svg(icon_type: str, color: str, size: int = 24) -> str | None:
+    """Load an SVG icon file and tint strokes with ``color``. Returns None if missing."""
+    path = _icon_asset_path(icon_type)
+    if path is None:
+        return None
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    # Support placeholder or currentColor in asset files
+    tinted = (
+        raw.replace("#ICON", color)
+        .replace("currentColor", color)
+        .replace('width="24"', f'width="{size}"')
+        .replace('height="24"', f'height="{size}"')
+    )
+    return tinted
+
+
 def generate_svg_icon(icon_type: str, color: str, size: int = 24) -> str:
-    """Generate SVG icon with specified color."""
+    """Return SVG markup for an icon — prefers ``assets/icons/{name}.svg`` when present."""
+    from_file = load_icon_svg(icon_type, color, size)
+    if from_file:
+        return from_file
     svgs = {
         "settings": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
             <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7z" stroke="{color}" stroke-width="2"/>
@@ -230,6 +319,18 @@ def generate_svg_icon(icon_type: str, color: str, size: int = 24) -> str:
         </svg>''',
         "chevron": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
             <path d="M9 6l6 6-6 6" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>''',
+        "chevron_right": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
+            <path d="M9 6l6 6-6 6" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>''',
+        "chevron_down": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
+            <path d="M6 9l6 6 6-6" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>''',
+        "folder": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
+            <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke="{color}" stroke-width="2" stroke-linejoin="round"/>
+        </svg>''',
+        "check": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
+            <path d="M5 12l5 5L20 7" stroke="{color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>''',
         "plus": f'''<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none">
             <path d="M12 5v14M5 12h14" stroke="{color}" stroke-width="2" stroke-linecap="round"/>
@@ -252,6 +353,12 @@ def generate_svg_icon(icon_type: str, color: str, size: int = 24) -> str:
         </svg>''',
     }
     return svgs.get(icon_type, "")
+
+
+def search_icon_pixmap(theme: Dict[str, Any], size: int = 16) -> "QPixmap":
+    """Shared search magnifier — same asset + amber accent everywhere."""
+    color = theme["colors"].get("accent", _c(theme, "text"))
+    return svg_to_pixmap(generate_svg_icon("search", color, size), size)
 
 
 def svg_to_pixmap(svg_str: str, size: int = 24) -> "QPixmap":
@@ -324,6 +431,9 @@ def label_stylesheet(theme: Dict[str, Any]) -> str:
 
 
 def line_edit_stylesheet(theme: Dict[str, Any]) -> str:
+    input_size = theme.get("fonts", {}).get("size_input", 14)
+    family = theme.get("fonts", {}).get("family") or ""
+    family_css = f'font-family: "{family}";' if family else ""
     return f"""
         QLineEdit {{
             background-color: {_c(theme, "input_bg")};
@@ -331,7 +441,8 @@ def line_edit_stylesheet(theme: Dict[str, Any]) -> str:
             border: 1px solid {_c(theme, "border")};
             border-radius: {_r(theme, "input")}px;
             padding: 8px;
-            font-size: 14px;
+            font-size: {input_size}px;
+            {family_css}
             min-height: 32px;
             selection-background-color: {_c(theme, "accent")};
         }}
@@ -344,10 +455,11 @@ def line_edit_stylesheet(theme: Dict[str, Any]) -> str:
 def _combo_dropdown_arrow_svg(theme: Dict[str, Any]) -> str:
     """Downward-pointing chevron as a base64 data URI for the combo box indicator."""
     import base64
+    stroke = theme["colors"].get("chrome_icon") or theme["colors"].get("icon") or _c(theme, "text")
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 8">'
-        '<path d="M1 1.5l5 5 5-5" fill="none" '
-        'stroke="#ffffff" stroke-width="2" stroke-linecap="round" '
+        f'<path d="M1 1.5l5 5 5-5" fill="none" '
+        f'stroke="{stroke}" stroke-width="2" stroke-linecap="round" '
         'stroke-linejoin="round"/></svg>'
     )
     encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
@@ -453,6 +565,7 @@ def combo_box_stylesheet(theme: Dict[str, Any]) -> str:
 
 
 def checkbox_stylesheet(theme: Dict[str, Any]) -> str:
+    cb = theme.get("spacing", {}).get("checkbox_size", 20)
     return f"""
         QCheckBox {{
             color: {_c(theme, "text")};
@@ -466,14 +579,18 @@ def checkbox_stylesheet(theme: Dict[str, Any]) -> str:
             min-width: 120px;
         }}
         QCheckBox::indicator {{
-            width: 18px;
-            height: 18px;
+            width: {cb}px;
+            height: {cb}px;
             border-radius: {_r(theme, "checkbox")}px;
             border: 1px solid {_c(theme, "checkbox_border")};
             background-color: {_c(theme, "checkbox_indicator")};
         }}
+        QCheckBox::indicator:hover {{
+            border: 1px solid {_c(theme, "accent")};
+        }}
         QCheckBox::indicator:checked {{
             background-color: {_c(theme, "checkbox_checked")};
+            border: 1px solid {_c(theme, "accent")};
         }}
     """
 
@@ -838,26 +955,28 @@ def accent_icon_button_stylesheet(theme: Dict[str, Any]) -> str:
 
 
 def primary_button_stylesheet(theme: Dict[str, Any]) -> str:
+    """Filled amber CTA — accent is reserved for meaning, not translucent white."""
     return f"""
         QPushButton#primaryButton {{
-            background: {_c(theme, "accent_button_bg")};
-            color: {_c(theme, "text")};
-            border: 1px solid {_c(theme, "border")};
+            background: {_c(theme, "accent")};
+            color: {_c(theme, "on_accent")};
+            border: 1px solid {_c(theme, "accent")};
             border-radius: {_r(theme, "button")}px;
             padding: 8px 20px;
             font-size: 13px;
-            font-weight: 500;
+            font-weight: 600;
             min-height: 32px;
         }}
         QPushButton#primaryButton:hover {{
-            background: {_c(theme, "hover_strong")};
-            border: 1px solid {_c(theme, "border_highlight")};
+            background: {_c(theme, "accent_hover")};
+            border: 1px solid {_c(theme, "accent_hover")};
         }}
         QPushButton#primaryButton:pressed {{
-            background: {_c(theme, "hover")};
+            background: {_c(theme, "accent_pressed")};
+            border: 1px solid {_c(theme, "accent_pressed")};
         }}
         QPushButton#primaryButton:focus {{
-            border: 1px solid {_c(theme, "accent")};
+            border: 1px solid {_c(theme, "accent_hover")};
         }}
     """
 
@@ -928,6 +1047,7 @@ def history_entry_label_stylesheet(theme: Dict[str, Any]) -> str:
 
 
 def group_header_stylesheet(theme: Dict[str, Any]) -> str:
+    weight = theme.get("fonts", {}).get("weight_header", 500)
     return f"""
         QPushButton#groupHeader {{
             background: {_c(theme, "group_header_bg")};
@@ -937,6 +1057,7 @@ def group_header_stylesheet(theme: Dict[str, Any]) -> str:
             padding: 8px 10px;
             text-align: left;
             font-size: 14px;
+            font-weight: {weight};
         }}
         QPushButton#groupHeader:hover {{
             background: {_c(theme, "group_header_hover")};
@@ -982,21 +1103,21 @@ def glass_overlap_stylesheet(theme: Dict[str, Any], radius: int = 20) -> str:
 
 
 def footer_history_button_stylesheet(theme: dict) -> str:
-    """Stylesheet for the footer history button."""
+    """Ghost-style footer history control — quieter than a bordered chip."""
     c = theme["colors"]
     return f"""
         QPushButton {{
             background: transparent;
-            color: {c.get('text', '#ffffff')};
-            border: 1px solid {c.get('border', 'rgba(255,255,255,60)')};
+            color: {c.get('text_muted', 'rgba(255,255,255,180)')};
+            border: none;
             border-radius: 6px;
-            padding: 3px 8px;
+            padding: 3px 6px;
             font-size: 10px;
             font-weight: 500;
         }}
         QPushButton:hover {{
+            color: {c.get('text', '#ffffff')};
             background: {c.get('hover', 'rgba(255,255,255,15)')};
-            border: 1px solid {c.get('border_highlight', 'rgba(255,255,255,80)')};
         }}
     """
 
@@ -1135,7 +1256,25 @@ def settings_scroll_area_stylesheet(theme: dict) -> str:
     """
 
 
+_STYLESHEET_CACHE: dict[str, str] = {}
+
+
 def build_application_stylesheet(theme: Dict[str, Any] | None = None) -> str:
+    """Build (and cache) the application-wide QSS for a theme dict or id."""
+    if isinstance(theme, str):
+        cache_key = normalize_theme_id(theme)
+        cached = _STYLESHEET_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+        resolved = get_theme(cache_key)
+        css = _build_application_stylesheet_uncached(resolved)
+        _STYLESHEET_CACHE[cache_key] = css
+        return css
+    resolved = theme or DARK_THEME
+    return _build_application_stylesheet_uncached(resolved)
+
+
+def _build_application_stylesheet_uncached(theme: Dict[str, Any]) -> str:
     """Full app QSS generated from the theme dictionary."""
     theme = theme or DARK_THEME
     sections = [
@@ -1176,10 +1315,21 @@ def apply_theme_to_app(
 ) -> Dict[str, Any]:
     """Apply generated QSS to the QApplication instance."""
     if isinstance(theme, str):
-        resolved = get_theme(theme)
+        theme_key = normalize_theme_id(theme)
+        resolved = get_theme(theme_key)
+        css = build_application_stylesheet(theme_key)
     else:
         resolved = deepcopy(theme or DARK_THEME)
-    app.setStyleSheet(build_application_stylesheet(resolved))
+        theme_key = resolved.get("id") or resolved.get("name")
+        css = build_application_stylesheet(resolved)
+
+    # Skip identical re-applies (common when settings echo theme_applied).
+    if getattr(app, "_nudge_theme_css", None) == css:
+        return resolved
+
+    # Set once — clearing first forced a second full app restyle.
+    app.setStyleSheet(css)
+    app._nudge_theme_css = css
 
     # Set QPalette so Qt uses proper cursor/selection colors (QSS caret-color is not supported)
     from PyQt6.QtGui import QColor, QPalette
@@ -1325,11 +1475,15 @@ def _style_all_combo_views(theme: Dict[str, Any], app=None) -> None:
 def refresh_glass_shells(
     root: QWidget,
     theme: Dict[str, Any] | str | None = None,
+    *,
+    polish_all: bool = False,
 ) -> None:
     """
     Re-apply the glass panel gradient on dialog shells after a global theme change (H7).
 
     Frameless translucent dialogs may not repaint the outer shell from app QSS alone.
+    By default only named glass shells are restyled — recursive polish-all is optional
+    because it is O(widgets) and causes visible lag on appearance changes.
     """
     if isinstance(theme, str):
         resolved = get_theme(theme)
@@ -1344,19 +1498,17 @@ def refresh_glass_shells(
         elif frame.objectName() == "nestedPanel":
             frame.setStyleSheet(nested_css)
 
-    style = root.style()
-    if style is None:
+    if polish_all:
+        style = root.style()
+        if style is not None:
+            all_widgets = [root] + root.findChildren(
+                QWidget, options=Qt.FindChildOption.FindChildrenRecursively
+            )
+            for widget in all_widgets:
+                style.unpolish(widget)
+                style.polish(widget)
+                widget.update()
+    else:
         root.update()
-        return
-
-    all_widgets = [root] + root.findChildren(QWidget, options=Qt.FindChildOption.FindChildrenRecursively)
-    for widget in all_widgets:
-        style.unpolish(widget)
-        style.polish(widget)
-        widget.update()
-
-    # Re-apply the global combo popup filter with updated theme
-    from PyQt6.QtWidgets import QApplication
-    _style_all_combo_views(resolved, app=QApplication.instance())
 
     root.update()
