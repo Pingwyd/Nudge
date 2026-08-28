@@ -1,7 +1,14 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
-from src.frontend.theme import get_theme, normalize_theme_id
+from src.frontend.theme import (
+    generate_svg_icon,
+    get_theme,
+    normalize_theme_id,
+    svg_to_pixmap,
+)
+
+_CHEVRON_SIZE = 14
 
 
 class CollapsibleHeader(QWidget):
@@ -17,12 +24,13 @@ class CollapsibleHeader(QWidget):
         layout.setContentsMargins(4, 8, 4, 4)
         layout.setSpacing(4)
 
-        self._chevron = QLabel("\u25bc")
+        self._chevron = QLabel()
+        self._chevron.setFixedSize(_CHEVRON_SIZE, _CHEVRON_SIZE)
         self._chevron.setStyleSheet("background: transparent; border: none;")
         layout.addWidget(self._chevron)
 
         self._label = QLabel(f"{self._title} \u00b7 {count}")
-        self._label.setStyleSheet("font-weight: bold; font-size: 12px; background: transparent; border: none;")
+        self._label.setStyleSheet("font-weight: 600; font-size: 12px; background: transparent; border: none;")
         layout.addWidget(self._label)
         layout.addStretch()
 
@@ -43,12 +51,19 @@ class CollapsibleHeader(QWidget):
         theme = get_theme(theme_id)
         c = theme["colors"]
         tmc = c.get("text_muted", "rgba(255,255,255,180)")
-        self._chevron.setStyleSheet(f"font-size: 10px; color: {tmc}; background: transparent; border: none;")
-        self._label.setStyleSheet(f"font-weight: bold; font-size: 12px; color: {tmc}; letter-spacing: 1px; background: transparent; border: none;")
+        accent = c.get("accent", tmc)
+        color = accent if self._expanded else tmc
+        icon_key = "chevron_down" if self._expanded else "chevron_right"
+        pix = svg_to_pixmap(generate_svg_icon(icon_key, color, _CHEVRON_SIZE), _CHEVRON_SIZE)
+        self._chevron.setPixmap(pix)
+        self._label.setStyleSheet(
+            f"font-weight: 600; font-size: 12px; color: {tmc}; "
+            "letter-spacing: 1px; background: transparent; border: none;"
+        )
 
     def _toggle(self):
         self._expanded = not self._expanded
-        self._chevron.setText("\u25bc" if self._expanded else "\u25b6")
+        self._apply_style()
         alive = []
         for child in self._children:
             try:

@@ -72,7 +72,10 @@ class DueDateChip(QWidget):
 
         if due == today:
             self._label.setText("Due today")
-            self._label.setStyleSheet(chip_css)
+            self._label.setStyleSheet(
+                f"color: {_c(theme, 'due_soon')}; font-size: 11px; "
+                "background: transparent; border: none;"
+            )
         elif due == tomorrow:
             self._label.setText("Due tomorrow")
             self._label.setStyleSheet(chip_css)
@@ -80,7 +83,8 @@ class DueDateChip(QWidget):
             days_overdue = (today - due).days
             self._label.setText(f"Overdue ({days_overdue}d)")
             self._label.setStyleSheet(
-                "color: #ff9800; font-size: 11px; background: transparent; border: none;"
+                f"color: {_c(theme, 'overdue')}; font-size: 11px; "
+                "background: transparent; border: none;"
             )
         else:
             # Future date - show "Tue 24 Jun" format

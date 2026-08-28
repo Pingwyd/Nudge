@@ -139,6 +139,20 @@ class TestPinTopMutualExclusion:
         assert 'blockSignals(True)' in pin_src
         assert 'blockSignals(True)' in top_src
 
+    def test_apply_window_layer_reinstalls_pin_hook(self):
+        """After setWindowFlags recreates the HWND, pin_to_desktop must run again."""
+        from src.frontend.main_window import MainWindow
+        src = inspect.getsource(MainWindow._apply_window_layer)
+        assert 'pin_to_desktop' in src
+        assert 'unpin_from_desktop' in src
+
+    def test_live_text_size_does_not_rebuild_task_list(self):
+        """Dragging the text-size slider must update rows in place, not render_tasks."""
+        from src.frontend.settings_dialog import SettingsDialog
+        src = inspect.getsource(SettingsDialog._emit_text_size_to_parent)
+        assert 'render_tasks' not in src
+        assert 'set_text_size' in src
+
 
 # ── 7.5 Empty state UI ────────────────────────────────────────────────
 
@@ -163,9 +177,9 @@ class TestEmptyStateUI:
         assert hasattr(MainWindow, '_update_empty_state')
 
     def test_render_tasks_calls_update_empty_state(self):
-        """Verify render_tasks calls _update_empty_state."""
+        """Verify _do_render calls _update_empty_state."""
         from src.frontend.task_controller import TaskController
-        source = inspect.getsource(TaskController.render_tasks)
+        source = inspect.getsource(TaskController._do_render)
         assert '_update_empty_state' in source
 
     def test_remove_task_calls_update_empty_state(self):

@@ -9,7 +9,7 @@ throughout the codebase.
 # ── Window & Dialog Sizes ─────────────────────────────────────────────
 # Format: (default_w, default_h, min_w, min_h)
 
-MAIN_WINDOW_DEFAULT = (300, 300)
+MAIN_WINDOW_DEFAULT = (300, 420)
 MAIN_WINDOW_MIN = (280, 280)
 
 HISTORY_DIALOG_DEFAULT = (420, 520)
@@ -170,6 +170,9 @@ DWM_SHADOW_DISABLE_DELAY_MS = 100
 DWM_SHADOW_DISABLE_SECOND_MS = 500
 EMPTY_STATE_BLINK_MS = 800
 DEFERRED_RENDER_MS = 0
+RENDER_DEBOUNCE_MS = 50
+TEXT_SIZE_LAYOUT_DEBOUNCE_MS = 80
+ROW_POOL_MAX = 96
 
 # ── Slider Ranges ─────────────────────────────────────────────────────
 
@@ -203,17 +206,35 @@ SPACING_MD = 8
 SPACING_LG = 10
 
 # ── Border Radius (px) ────────────────────────────────────────────────
-# NOTE: These should match theme.py radii dict. Listed here for
-# inline stylesheet use where theme access isn't available.
+# Single source of truth: theme.py DARK_THEME["radii"]. These aliases are
+# kept for call sites that need a plain int without a theme dict.
 
-RADIUS_WINDOW = 20
-RADIUS_PANEL = 20
-RADIUS_INPUT = 10
-RADIUS_BUTTON = 8
-RADIUS_TAB = 8
-RADIUS_CHECKBOX = 4
-RADIUS_MENU = 5
-RADIUS_SMALL = 4
+def _radii_from_theme() -> dict:
+    from src.frontend.theme import DARK_THEME
+    return DARK_THEME["radii"]
+
+
+_RADII = None
+
+
+def _r(key: str, default: int) -> int:
+    global _RADII
+    if _RADII is None:
+        try:
+            _RADII = _radii_from_theme()
+        except Exception:
+            return default
+    return int(_RADII.get(key, default))
+
+
+RADIUS_WINDOW = _r("window", 20)
+RADIUS_PANEL = _r("panel", 20)
+RADIUS_INPUT = _r("input", 10)
+RADIUS_BUTTON = _r("button", 8)
+RADIUS_TAB = _r("tab", 8)
+RADIUS_CHECKBOX = _r("checkbox", 4)
+RADIUS_MENU = _r("menu", 5)
+RADIUS_SMALL = _r("small", 4)
 
 # ── Misc Widget Sizing ────────────────────────────────────────────────
 
@@ -238,6 +259,11 @@ SETTINGS_MAIN_LAYOUT_MARGINS = (14, 12, 14, 14)
 SETTINGS_VALUE_LABEL_MIN_WIDTH = 48
 SETTINGS_APPEARANCE_TAB_SPACING = 14
 SETTINGS_EXPORT_GROUP_CONTENT_MARGINS = (14, 4, 4, 4)
+
+# ── Task row layout ───────────────────────────────────────────────────
+TASK_ROW_MARGINS = (12, 9, 8, 9)  # L, T, R, B — breathing room for hierarchy
+TASK_ROW_CHECKBOX_SIZE = 22
+TASK_CHECKBOX_INDICATOR = 20
 
 # ── Priority Header (flat list) ───────────────────────────────────────
 
@@ -310,6 +336,11 @@ HISTORY_ICON_FONT_MIN = 10
 # ── Hotkey Filter ─────────────────────────────────────────────────────
 
 HOTKEY_START_ID = 1000
+
+# ── Shortcut Keys ─────────────────────────────────────────────────────
+
+TOGGLE_GROUPS_SHORTCUT = "Ctrl+G"
+UNDO_SHORTCUT = "Ctrl+Z"
 
 # ── GlowOverlay ───────────────────────────────────────────────────────
 

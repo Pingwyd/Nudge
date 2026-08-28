@@ -22,6 +22,11 @@ class InfoToast(QFrame):
     def __init__(self, parent, message, timeout_ms=TOAST_DEFAULT_TIMEOUT_MS):
         super().__init__(parent)
         self._main_window = parent
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.Tool
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
         self.setObjectName("infoToast")
         self.setMaximumWidth(TOAST_MAX_WIDTH)
 
