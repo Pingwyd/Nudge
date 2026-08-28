@@ -68,7 +68,59 @@ class ThemeCardWidget(QFrame):
         theme = get_theme(self._current_theme_id)
         text_color = _c(theme, "text")
         if self._selected:
-            self.setStyleSheet(f"border: {THEME_CARD_BORDER_WIDTH}px solid #4fc3f7; border-radius: {RADIUS_BUTTON}px;")
+            self.setStyleSheet(f"border: {THEME_CARD_BORDER_WIDTH}px solid {_c(theme, 'accent')}; border-radius: {RADIUS_BUTTON}px;")
+        else:
+            self.setStyleSheet(f"border: {THEME_CARD_BORDER_WIDTH}px solid transparent; border-radius: {RADIUS_BUTTON}px;")
+        self._name_label.setStyleSheet(f"color: {text_color}; font-size: {FONT_SIZE_LABEL_SM}px; border: none;")
+
+    def update_theme(self, theme_id):
+        self._current_theme_id = theme_id
+        self._update_style()
+
+    def set_selected(self, selected):
+        self._selected = selected
+        self._update_style()
+
+
+class AutoThemeCardWidget(QFrame):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.theme_id = "auto"
+        self.theme_name = "Auto"
+        self.setFixedSize(*THEME_CARD_SIZE)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(*THEME_CARD_MARGINS)
+        layout.setSpacing(THEME_CARD_SPACING)
+
+        preview = QFrame()
+        preview.setFixedHeight(THEME_CARD_PREVIEW_HEIGHT)
+        preview_layout = QHBoxLayout(preview)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setSpacing(0)
+        left = QFrame()
+        left.setStyleSheet(f"background: #1e1e1e; border: none; border-top-left-radius: {THEME_CARD_PREVIEW_RADIUS}px; border-bottom-left-radius: {THEME_CARD_PREVIEW_RADIUS}px;")
+        right = QFrame()
+        right.setStyleSheet(f"background: #f5f5f5; border: none; border-top-right-radius: {THEME_CARD_PREVIEW_RADIUS}px; border-bottom-right-radius: {THEME_CARD_PREVIEW_RADIUS}px;")
+        preview_layout.addWidget(left)
+        preview_layout.addWidget(right)
+        layout.addWidget(preview)
+
+        self._name_label = QLabel("Auto")
+        self._name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._name_label)
+
+        self._selected = False
+        self._current_theme_id = "dark"
+        self._update_style()
+
+    def _update_style(self):
+        from src.frontend.theme import get_theme, _c
+        theme = get_theme(self._current_theme_id)
+        text_color = _c(theme, "text")
+        if self._selected:
+            self.setStyleSheet(f"border: {THEME_CARD_BORDER_WIDTH}px solid {_c(theme, 'accent')}; border-radius: {RADIUS_BUTTON}px;")
         else:
             self.setStyleSheet(f"border: {THEME_CARD_BORDER_WIDTH}px solid transparent; border-radius: {RADIUS_BUTTON}px;")
         self._name_label.setStyleSheet(f"color: {text_color}; font-size: {FONT_SIZE_LABEL_SM}px; border: none;")
@@ -125,7 +177,7 @@ class SettingsCardWidget(QFrame):
 
 
 class ToggleSwitchWidget(QCheckBox):
-    def __init__(self, on_color="#4fc3f7", off_color="#666666", parent=None):
+    def __init__(self, on_color="#F5A623", off_color="#666666", parent=None):
         super().__init__(parent)
         self.setFixedSize(*TOGGLE_SWITCH_SIZE)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
