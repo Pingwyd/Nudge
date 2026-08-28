@@ -8,6 +8,7 @@ if sys.platform == "win32":
     import winreg
 from typing import Tuple
 
+from src.backend.debounced_saver import DebouncedSaver
 from src.backend.logging_config import setup_logging
 from src.backend.window_geometry import (
     DEFAULT_WINDOW_HEIGHT,
@@ -21,11 +22,28 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
+def detect_os_theme() -> str:
+    """Detect Windows light/dark preference. Returns 'light' or 'dark'."""
+    if sys.platform != "win32":
+        return "dark"
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        )
+        value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+        winreg.CloseKey(key)
+        return "light" if value == 1 else "dark"
+    except Exception:
+        return "dark"
+
+
 class StateManager:
-    def __init__(self, filename="appstate.json"):
+    def __init__(self, filename="appstate.json", delay_ms: int = 200):
         # Persist app state under the per-user data directory.
         migrate_legacy_data()
         self.filepath = get_data_file(filename)
+        self._saver = DebouncedSaver(self.filepath, delay_ms)
         logger.info("StateManager initialized: %s", self.filepath)
         # Default state
         self.state = {
@@ -39,6 +57,7 @@ class StateManager:
             "positionLocked": False,
             "alwaysOnTop": False,
             "theme": "dark",
+            "followOsTheme": True,
             "taskTextSize": 14,
             "historyShortcut": "Ctrl+H",
             "settingsShortcut": "Ctrl+,",
@@ -156,12 +175,11 @@ class StateManager:
         return self.state
 
     def save(self):
-        try:
-            with open(self.filepath, 'w', encoding='utf-8') as f:
-                json.dump(self.state, f, indent=4)
-            logger.info("State saved")
-        except OSError:
-            pass
+        self._saver.save(self.state)
+
+    def flush(self):
+        """Immediate write — call on app quit."""
+        self._saver.flush()
 
     def set_run_on_startup(self, enable: bool):
         """

@@ -68,11 +68,13 @@ class TestStateManagerSave:
 
     def test_save_creates_file(self, state_manager):
         state_manager.save()
+        state_manager.flush()
         assert state_manager.filepath.exists()
 
     def test_save_persists_data(self, state_manager):
         state_manager.state["theme"] = "light"
         state_manager.save()
+        state_manager.flush()
         # Load in a new StateManager
         with patch("src.backend.state_manager.get_data_file", return_value=state_manager.filepath):
             sm2 = StateManager("test_appstate.json")
@@ -83,6 +85,7 @@ class TestStateManagerSave:
     def test_save_is_atomic(self, state_manager):
         """Verify atomic write doesn't leave temp files."""
         state_manager.save()
+        state_manager.flush()
         # Check no .tmp files remain
         temp_files = list(state_manager.filepath.parent.glob("*.tmp"))
         assert len(temp_files) == 0
