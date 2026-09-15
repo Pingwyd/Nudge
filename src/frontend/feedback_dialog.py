@@ -18,27 +18,26 @@ from PyQt6.QtWidgets import (
 from src import __version__
 from src.backend.icon import get_app_icon
 from src.constants import (
-    FEEDBACK_MAX_CHARS,
+    COPIED_LABEL_RESET_MS,
+    DIALOG_BTN_COMPACT_HEIGHT,
+    DIALOG_BTN_HEIGHT,
+    DIALOG_BTN_MIN_WIDTH,
+    FEEDBACK_CHAR_COUNT_OPACITY,
     FEEDBACK_DIALOG_DEFAULT,
     FEEDBACK_DIALOG_MIN,
-    FEEDBACK_OVERLAP_RADIUS,
-    FEEDBACK_MAIN_LAYOUT_MARGINS,
-    FEEDBACK_LAYOUT_SPACING,
-    FEEDBACK_INPUT_CARD_MARGINS,
-    FEEDBACK_SNAPSHOT_CARD_MARGINS,
-    FEEDBACK_INPUT_MIN_HEIGHT,
-    FEEDBACK_SNAPSHOT_HEIGHT,
-    FEEDBACK_BTN_WIDTH,
-    FEEDBACK_SUBTITLE_OPACITY,
-    FEEDBACK_CHAR_COUNT_OPACITY,
     FEEDBACK_FOOTER_OPACITY,
+    FEEDBACK_INPUT_CARD_MARGINS,
+    FEEDBACK_INPUT_MIN_HEIGHT,
+    FEEDBACK_MAX_CHARS,
+    FEEDBACK_OVERLAP_RADIUS,
+    FEEDBACK_SNAPSHOT_CARD_MARGINS,
+    FEEDBACK_SNAPSHOT_HEIGHT,
+    FEEDBACK_SUBTITLE_OPACITY,
     FONT_SIZE_TITLE_LG,
-    SPACING_SM,
     SPACING_MD,
-    BTN_HEIGHT_SM,
-    BTN_HEIGHT_LG,
-    COPIED_LABEL_RESET_MS,
+    SPACING_SM,
 )
+from src.frontend.dialog_layout import add_dialog_footer, apply_dialog_content_layout
 from src.frontend.glass_panel_dialog import GlassPanelDialog
 from src.frontend.theme import get_theme, normalize_theme_id
 
@@ -59,8 +58,7 @@ class FeedbackDialog(GlassPanelDialog):
         self.bg_frame.setGeometry(0, 0, w, h)
 
         layout = QVBoxLayout(self.bg_frame)
-        layout.setContentsMargins(*FEEDBACK_MAIN_LAYOUT_MARGINS)
-        layout.setSpacing(FEEDBACK_LAYOUT_SPACING)
+        apply_dialog_content_layout(layout)
 
         title = QLabel("Send Feedback")
         title.setStyleSheet(f"font-size: {FONT_SIZE_TITLE_LG}px; font-weight: bold;")
@@ -107,8 +105,9 @@ class FeedbackDialog(GlassPanelDialog):
         self.snapshot_toggle = QPushButton("▸  App state snapshot")
         self.snapshot_toggle.setObjectName("ghostButton")
         self.snapshot_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.snapshot_toggle.setFixedHeight(DIALOG_BTN_COMPACT_HEIGHT)
         self.snapshot_toggle.setStyleSheet(
-            "QPushButton#ghostButton { text-align: left; padding: 4px 8px; font-weight: 600; }"
+            "QPushButton#ghostButton { text-align: left; font-weight: 600; }"
         )
         self.snapshot_toggle.clicked.connect(self._toggle_snapshot)
         snapshot_header_row.addWidget(self.snapshot_toggle)
@@ -116,7 +115,8 @@ class FeedbackDialog(GlassPanelDialog):
 
         copy_btn = QPushButton("Copy")
         copy_btn.setObjectName("ghostButton")
-        copy_btn.setFixedHeight(BTN_HEIGHT_SM)
+        copy_btn.setFixedHeight(DIALOG_BTN_COMPACT_HEIGHT)
+        copy_btn.setMinimumWidth(64)
         copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         copy_btn.clicked.connect(self._copy_snapshot)
         self._copy_btn = copy_btn
@@ -150,26 +150,15 @@ class FeedbackDialog(GlassPanelDialog):
         footer.setStyleSheet(f"opacity: {FEEDBACK_FOOTER_OPACITY};")
         layout.addWidget(footer)
 
-        button_row = QHBoxLayout()
-        button_row.setSpacing(SPACING_MD)
-        button_row.addStretch(1)
-
-        self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.setObjectName("ghostButton")
-        self.cancel_btn.setFixedSize(FEEDBACK_BTN_WIDTH, BTN_HEIGHT_LG)
-        self.cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.cancel_btn.clicked.connect(self.reject)
-        button_row.addWidget(self.cancel_btn)
-
-        self.open_btn = QPushButton("Open Gmail")
-        self.open_btn.setObjectName("primaryButton")
-        self.open_btn.setFixedSize(FEEDBACK_BTN_WIDTH, BTN_HEIGHT_LG)
-        self.open_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.open_btn.setDefault(True)
-        self.open_btn.clicked.connect(self._send_feedback)
-        button_row.addWidget(self.open_btn)
-
-        layout.addLayout(button_row)
+        footer_btns = add_dialog_footer(
+            layout,
+            [
+                ("Cancel", "ghost", self.reject),
+                ("Open Gmail", "primary", self._send_feedback),
+            ],
+        )
+        self.cancel_btn = footer_btns[0]
+        self.open_btn = footer_btns[1]
 
         self._update_overlap_opacity()
         QTimer.singleShot(0, self.input_edit.setFocus)
