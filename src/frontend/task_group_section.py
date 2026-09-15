@@ -57,6 +57,8 @@ class TaskGroupSection(QWidget):
         self._theme_id = "dark"
         self._search_type_label = False
         self._sticky_pin_hidden = False
+        self._sticky_peek_concealed = False
+        self._header_chrome_cached = False
         self.setAcceptDrops(True)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
@@ -222,14 +224,12 @@ class TaskGroupSection(QWidget):
             return normalize_theme_id(self._ctx.get_theme_id())
         return normalize_theme_id(self._theme_id)
 
-    def _refresh_header_chrome(self, count: int | None = None) -> None:
-        """Apply outline chevron icon + title text (theme-aware stroke)."""
+    def _header_chrome_parts(self, count: int | None = None) -> tuple[str, QIcon]:
         name = self.group.get("name", "Group")
         if count is None:
             count = len(self.task_rows)
         theme_id = self._resolve_theme_id()
         theme = get_theme(theme_id)
-        # Active (expanded) chevron uses accent; collapsed uses muted chrome
         if self._expanded:
             color = theme["colors"].get("accent", theme["colors"]["text"])
             icon_key = "chevron_down"
@@ -238,17 +238,80 @@ class TaskGroupSection(QWidget):
                 "chrome_icon", theme["colors"]["text"]
             )
             icon_key = "chevron_right"
-        pix = svg_to_pixmap(generate_svg_icon(icon_key, color, _CHEVRON_ICON_SIZE), _CHEVRON_ICON_SIZE)
-        self.header_btn.setIcon(QIcon(pix))
+        pix = svg_to_pixmap(
+            generate_svg_icon(icon_key, color, _CHEVRON_ICON_SIZE), _CHEVRON_ICON_SIZE
+        )
         prefix = "Group · " if getattr(self, "_search_type_label", False) else ""
-        self.header_btn.setText(f"  {prefix}{name}  ({count})")
-        if self._sticky_pin_hidden:
-            self.header_btn.setVisible(False)
+        text = f"  {prefix}{name}  ({count})"
+        return text, QIcon(pix)
+
+    def header_chrome_for_sticky_clone(self) -> tuple[str, QIcon, QSize]:
+        """Label/icon for viewport sticky clone (works while in-list header is concealed)."""
+        text, icon = self._header_chrome_parts()
+        return text, icon, self.header_btn.iconSize()
+
+    def _refresh_header_chrome(self, count: int | None = None) -> None:
+        """Apply outline chevron icon + title text (theme-aware stroke)."""
+        text, icon = self._header_chrome_parts(count)
+        self.header_btn.setIcon(icon)
+        self.header_btn.setText(text)
+        self._header_chrome_cached = True
+        self._apply_header_concealment()
+
+    _HEADER_CONCEAL_STYLE = (
+        "QPushButton#groupHeader {"
+        " background: transparent;"
+        " color: transparent;"
+        " border: 1px solid transparent;"
+        " padding: 8px 10px;"
+        "}"
+    )
+
+    def _apply_header_concealment(self) -> None:
+        concealed = self._sticky_pin_hidden or self._sticky_peek_concealed
+        if concealed:
+            self.header_btn.setVisible(True)
+            self.header_btn.setText(" ")
+            self.header_btn.setIcon(QIcon())
+            self.header_btn.setStyleSheet(self._HEADER_CONCEAL_STYLE)
+            self.header_btn.setEnabled(False)
+            self.header_btn.setAttribute(
+                Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
+            )
+        else:
+            self.header_btn.setStyleSheet("")
+            self.header_btn.setEnabled(True)
+            self.header_btn.setAttribute(
+                Qt.WidgetAttribute.WA_TransparentForMouseEvents, False
+            )
+
+    def _restore_header_chrome_if_visible(self) -> None:
+        if not self._sticky_pin_hidden and not self._sticky_peek_concealed:
+            self.refresh_header_count()
 
     def set_sticky_pin_active(self, active: bool) -> None:
-        """Hide in-list header while the viewport sticky clone shows the same chrome."""
-        self._sticky_pin_hidden = bool(active)
-        self.header_btn.setVisible(not active)
+        """Conceal in-list header (keep layout height) while sticky clone is shown."""
+        active = bool(active)
+        if self._sticky_pin_hidden == active:
+            return
+        self._sticky_pin_hidden = active
+        self._apply_header_concealment()
+        self._restore_header_chrome_if_visible()
+
+    def set_sticky_peek_concealed(self, active: bool) -> None:
+        """Conceal header peeking into the viewport pin band without sticky chrome."""
+        active = bool(active)
+        if self._sticky_peek_concealed == active:
+            return
+        self._sticky_peek_concealed = active
+        self._apply_header_concealment()
+        self._restore_header_chrome_if_visible()
+
+    def reset_sticky_header_concealment(self) -> None:
+        self._sticky_pin_hidden = False
+        self._sticky_peek_concealed = False
+        self._apply_header_concealment()
+        self.refresh_header_count()
 
     def set_search_type_label(self, enabled: bool) -> None:
         self._search_type_label = bool(enabled)

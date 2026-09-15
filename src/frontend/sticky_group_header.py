@@ -11,8 +11,9 @@ StickyCandidate = Tuple[bool, int, int, int]
 def pick_sticky_section_index(candidates: Sequence[StickyCandidate]) -> Optional[int]:
     """Pick the group whose header is crossing the top edge of the scroll viewport.
 
-    Among sections whose header has scrolled above y=0 but the section still extends
-    below the pin bar, choose the one with the largest header_top (closest to 0).
+    Among sections whose header has scrolled above y=0 but still intersects the
+    viewport top (or the section remains visible), choose the largest header_top
+    (closest to 0).
     """
     best_index: Optional[int] = None
     best_header_top: Optional[int] = None
@@ -22,10 +23,24 @@ def pick_sticky_section_index(candidates: Sequence[StickyCandidate]) -> Optional
             continue
         if header_top >= 0:
             continue
-        if section_bottom <= header_height:
+        if section_bottom <= 0:
+            continue
+        if header_top + header_height <= 0:
             continue
         if best_header_top is None or header_top > best_header_top:
             best_header_top = header_top
             best_index = index
 
     return best_index
+
+
+def header_intersects_pin_band(
+    header_top: int,
+    header_height: int,
+    pin_height: int,
+) -> bool:
+    """True if the header widget rect intersects viewport y in [0, pin_height)."""
+    if pin_height <= 0 or header_height <= 0:
+        return False
+    header_bottom = header_top + header_height
+    return header_top < pin_height and header_bottom > 0

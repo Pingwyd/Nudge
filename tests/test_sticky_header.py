@@ -1,6 +1,9 @@
 """Unit tests for sticky group header selection geometry."""
 
-from src.frontend.sticky_group_header import pick_sticky_section_index
+from src.frontend.sticky_group_header import (
+    header_intersects_pin_band,
+    pick_sticky_section_index,
+)
 
 
 def test_pick_none_when_all_headers_below_fold():
@@ -33,7 +36,24 @@ def test_pick_max_header_top_among_matches():
 def test_skip_hidden_and_fully_scrolled():
     candidates = [
         (True, -5, 32, 200),   # hidden
-        (False, -10, 32, 20),  # section bottom above pin bar
+        (False, -10, 32, 20),  # short tail still intersects header band
         (False, -3, 32, 150),
     ]
     assert pick_sticky_section_index(candidates) == 2
+
+
+def test_skip_header_fully_above_viewport():
+    candidates = [
+        (False, -40, 32, 15),  # header fully scrolled off, only content sliver
+    ]
+    assert pick_sticky_section_index(candidates) is None
+
+
+def test_header_intersects_pin_band():
+    assert header_intersects_pin_band(0, 32, 40) is True
+    assert header_intersects_pin_band(10, 32, 40) is True
+    assert header_intersects_pin_band(-5, 32, 40) is True
+    assert header_intersects_pin_band(40, 32, 40) is False
+    assert header_intersects_pin_band(50, 32, 40) is False
+    assert header_intersects_pin_band(0, 0, 40) is False
+    assert header_intersects_pin_band(0, 32, 0) is False
