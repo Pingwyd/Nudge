@@ -1277,7 +1277,11 @@ class MainWindow(QMainWindow):
 
         # Empty state widget (shown when no tasks)
         self._empty_state_widget = QWidget()
+        self._empty_state_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
         empty_layout = QVBoxLayout(self._empty_state_widget)
+        empty_layout.setContentsMargins(0, 0, 0, 0)
         empty_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_layout.setSpacing(EMPTY_STATE_SPACING)
 
@@ -1295,7 +1299,7 @@ class MainWindow(QMainWindow):
         self._empty_state_timer.timeout.connect(self._animate_empty_arrow)
         self._empty_state_arrow_visible = True
 
-        layout.addWidget(self._empty_state_widget)
+        layout.addWidget(self._empty_state_widget, stretch=1)
         self._empty_state_widget.hide()
 
         # --- Search shortcut ---

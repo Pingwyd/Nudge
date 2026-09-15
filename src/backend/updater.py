@@ -417,6 +417,15 @@ FRIENDLY_CHANGELOGS: dict[str, str] = {
         "  \u2022 Fixed update dialog crash (missing FONT_SIZE_BODY import)\n"
         "  \u2022 Fixed Windows update installing the wrong file type"
     ),
+    "2.0.4": (
+        "\ud83d\udc1b Bug Fixes\n"
+        "  \u2022 Fixed sticky group headers when scrolling grouped lists (ghosting, gaps, missing labels)\n"
+        "  \u2022 Fixed History dialog footer (readable Close and Skip confirmation)\n"
+        "\n"
+        "\ud83d\udce6 Improvements\n"
+        "  \u2022 More consistent compact buttons in dialogs\n"
+        "  \u2022 Empty state keeps the footer divider at the bottom when the window is resized"
+    ),
 }
 
 
