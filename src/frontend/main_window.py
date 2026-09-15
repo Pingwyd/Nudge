@@ -66,6 +66,7 @@ from src.frontend.shortcut_manager import ShortcutManager
 from src.frontend.tag_filter_dropdown import TagFilterDropdown
 from src.frontend.task_controller import TaskContext, TaskController
 from src.frontend.task_search_bar import TaskSearchBar
+from src.frontend.sticky_group_header import pick_sticky_section_index
 from src.frontend.task_group_section import TaskGroupSection
 from src.frontend.task_row import TaskRowWidget
 from src.frontend.theme import (_c, apply_theme_to_app,
@@ -1360,6 +1361,10 @@ class MainWindow(QMainWindow):
             self._footer_task_count.setText(f"{total} tasks")
         if not has_tasks:
             self._empty_state_timer.start(EMPTY_STATE_BLINK_MS)
+            if hasattr(self, "_sticky_group_header"):
+                self._reset_sticky_header_visibility()
+                self._sticky_group_header.hide()
+                self._sticky_section_id = None
         else:
             self._empty_state_timer.stop()
 
@@ -1369,6 +1374,8 @@ class MainWindow(QMainWindow):
             self._glow_overlay.setGeometry(self.scroll_area.viewport().rect())
         if hasattr(self, '_drop_overlay') and self.scroll_area is not None:
             self._drop_overlay.setGeometry(self.scroll_area.viewport().rect())
+        if hasattr(self, "_sticky_group_header"):
+            self._update_sticky_group_header()
         if not self._resize_live:
             self._begin_live_resize()
         if self._resize_timer.isActive():
@@ -1641,37 +1648,71 @@ class MainWindow(QMainWindow):
             section.set_content_expanded(not section._expanded, persist=True)
             self._update_sticky_group_header()
 
+    def _reset_sticky_header_visibility(self) -> None:
+        for section in self.group_sections.values():
+            if hasattr(section, "set_sticky_pin_active"):
+                section.set_sticky_pin_active(False)
+
+    def _ordered_visible_group_sections(self) -> list[TaskGroupSection]:
+        ordered: list[TaskGroupSection] = []
+        if not hasattr(self, "tasks_layout"):
+            return ordered
+        for i in range(self.tasks_layout.count()):
+            item = self.tasks_layout.itemAt(i)
+            if item is None:
+                continue
+            w = item.widget()
+            if isinstance(w, TaskGroupSection) and not w.isHidden():
+                ordered.append(w)
+        return ordered
+
+    def _raise_scroll_overlays(self) -> None:
+        if hasattr(self, "_sticky_group_header"):
+            self._sticky_group_header.raise_()
+        if hasattr(self, "_glow_overlay"):
+            self._glow_overlay.raise_()
+        if hasattr(self, "_drop_overlay"):
+            self._drop_overlay.raise_()
+
     def _update_sticky_group_header(self, *_args) -> None:
         if not hasattr(self, "_sticky_group_header"):
             return
+        self._reset_sticky_header_visibility()
         groups_enabled = self.app_state.get("groupsEnabled", DEFAULT_GROUPS_ENABLED)
-        if not groups_enabled or not self.group_sections:
-            self._sticky_group_header.hide()
-            self._sticky_section_id = None
-            return
         vp = self.scroll_area.viewport()
-        sticky = None
-        for section in self.group_sections.values():
-            if section.isHidden():
-                continue
-            top_left = section.mapTo(vp, QPoint(0, 0))
-            # Section scrolled up but still intersecting viewport
-            if top_left.y() < 0 and top_left.y() + section.height() > 28:
-                sticky = section
-                break
-        if sticky is None:
+        if not groups_enabled or not self.group_sections or not self.scroll_area.isVisible():
             self._sticky_group_header.hide()
             self._sticky_section_id = None
+            vp.update()
             return
+
+        sections = self._ordered_visible_group_sections()
+        candidates: list[tuple[bool, int, int, int]] = []
+        for section in sections:
+            header_top = section.header_btn.mapTo(vp, QPoint(0, 0)).y()
+            header_h = max(1, section.header_btn.height())
+            section_bottom = section.mapTo(vp, QPoint(0, section.height())).y()
+            candidates.append((False, header_top, header_h, section_bottom))
+
+        pick = pick_sticky_section_index(candidates)
+        if pick is None:
+            self._sticky_group_header.hide()
+            self._sticky_section_id = None
+            vp.update()
+            return
+
+        sticky = sections[pick]
         self._sticky_section_id = sticky.group_id
+        sticky.set_sticky_pin_active(True)
         self._sticky_group_header.setText(sticky.header_btn.text())
         self._sticky_group_header.setIcon(sticky.header_btn.icon())
         self._sticky_group_header.setIconSize(sticky.header_btn.iconSize())
         w = vp.width()
         h = max(32, sticky.header_btn.sizeHint().height())
         self._sticky_group_header.setGeometry(0, 0, w, h)
-        self._sticky_group_header.raise_()
         self._sticky_group_header.show()
+        self._raise_scroll_overlays()
+        vp.update()
 
     def _rename_group(self, group_id: str) -> None:
         self._group_controller._rename_group(group_id)
@@ -1808,6 +1849,8 @@ class MainWindow(QMainWindow):
 
         if hasattr(self, "_search_bar"):
             self._search_bar.set_has_results(has_results if searching else False)
+
+        QTimer.singleShot(0, self._update_sticky_group_header)
 
     # --- Search bar methods ---
 

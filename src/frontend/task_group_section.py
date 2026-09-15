@@ -56,6 +56,7 @@ class TaskGroupSection(QWidget):
         self._is_dragging = False
         self._theme_id = "dark"
         self._search_type_label = False
+        self._sticky_pin_hidden = False
         self.setAcceptDrops(True)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
@@ -241,6 +242,13 @@ class TaskGroupSection(QWidget):
         self.header_btn.setIcon(QIcon(pix))
         prefix = "Group · " if getattr(self, "_search_type_label", False) else ""
         self.header_btn.setText(f"  {prefix}{name}  ({count})")
+        if self._sticky_pin_hidden:
+            self.header_btn.setVisible(False)
+
+    def set_sticky_pin_active(self, active: bool) -> None:
+        """Hide in-list header while the viewport sticky clone shows the same chrome."""
+        self._sticky_pin_hidden = bool(active)
+        self.header_btn.setVisible(not active)
 
     def set_search_type_label(self, enabled: bool) -> None:
         self._search_type_label = bool(enabled)
