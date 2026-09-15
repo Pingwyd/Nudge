@@ -1065,6 +1065,28 @@ def group_header_stylesheet(theme: Dict[str, Any]) -> str:
     """
 
 
+def sticky_group_header_stylesheet(theme: Dict[str, Any]) -> str:
+    """Opaque viewport clone — avoids glass bleed-through from scrolled headers."""
+    weight = theme.get("fonts", {}).get("weight_header", 500)
+    solid = _c(theme, "glass_overlap_solid")
+    return f"""
+        QPushButton#stickyGroupHeader {{
+            background-color: {solid};
+            color: {_c(theme, "text")};
+            border: 1px solid {_c(theme, "group_header_border")};
+            border-radius: {_r(theme, "input")}px;
+            padding: 8px 10px;
+            text-align: left;
+            font-size: 14px;
+            font-weight: {weight};
+        }}
+        QPushButton#stickyGroupHeader:hover {{
+            background-color: {solid};
+            border: 1px solid {_c(theme, "border_highlight")};
+        }}
+    """
+
+
 def separator_stylesheet(theme: Dict[str, Any]) -> str:
     return f"""
         QFrame#hSeparator,
@@ -1301,6 +1323,7 @@ def _build_application_stylesheet_uncached(theme: Dict[str, Any]) -> str:
         sidebar_button_stylesheet(theme),
         danger_button_stylesheet(theme),
         group_header_stylesheet(theme),
+        sticky_group_header_stylesheet(theme),
         separator_stylesheet(theme),
         drop_indicator_stylesheet(theme),
         history_entry_label_stylesheet(theme),
