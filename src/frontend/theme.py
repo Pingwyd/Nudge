@@ -922,8 +922,8 @@ def ghost_button_stylesheet(theme: Dict[str, Any]) -> str:
             border-radius: {_r(theme, "button")}px;
             font-size: 13px;
             font-weight: 500;
-            padding: 6px 16px;
-            min-height: 30px;
+            padding: 8px 20px;
+            min-height: 32px;
         }}
         QPushButton#ghostButton:hover {{
             background: {_c(theme, "hover")};
@@ -958,64 +958,24 @@ def primary_button_stylesheet(theme: Dict[str, Any]) -> str:
     """Filled amber CTA — accent is reserved for meaning, not translucent white."""
     return f"""
         QPushButton#primaryButton {{
-            background-color: {_c(theme, "accent")};
+            background: {_c(theme, "accent")};
             color: {_c(theme, "on_accent")};
             border: 1px solid {_c(theme, "accent")};
             border-radius: {_r(theme, "button")}px;
-            padding: 6px 16px;
+            padding: 8px 20px;
             font-size: 13px;
             font-weight: 600;
-            min-height: 30px;
+            min-height: 32px;
         }}
         QPushButton#primaryButton:hover {{
-            background-color: {_c(theme, "accent_hover")};
+            background: {_c(theme, "accent_hover")};
             border: 1px solid {_c(theme, "accent_hover")};
-            color: {_c(theme, "on_accent")};
         }}
         QPushButton#primaryButton:pressed {{
-            background-color: {_c(theme, "accent_pressed")};
+            background: {_c(theme, "accent_pressed")};
             border: 1px solid {_c(theme, "accent_pressed")};
-            color: {_c(theme, "on_accent")};
         }}
         QPushButton#primaryButton:focus {{
-            background-color: {_c(theme, "accent")};
-            color: {_c(theme, "on_accent")};
-            border: 1px solid {_c(theme, "accent_hover")};
-        }}
-        QPushButton#primaryButton:default {{
-            background-color: {_c(theme, "accent")};
-            color: {_c(theme, "on_accent")};
-            border: 1px solid {_c(theme, "accent")};
-        }}
-    """
-
-
-def push_button_primary_stylesheet(theme: Dict[str, Any]) -> str:
-    """Primary CTA for per-widget setStyleSheet (e.g. glass dialogs)."""
-    return f"""
-        QPushButton {{
-            background-color: {_c(theme, "accent")};
-            color: {_c(theme, "on_accent")};
-            border: 1px solid {_c(theme, "accent")};
-            border-radius: {_r(theme, "button")}px;
-            padding: 6px 16px;
-            font-size: 13px;
-            font-weight: 600;
-            min-height: 30px;
-        }}
-        QPushButton:hover {{
-            background-color: {_c(theme, "accent_hover")};
-            border: 1px solid {_c(theme, "accent_hover")};
-            color: {_c(theme, "on_accent")};
-        }}
-        QPushButton:pressed {{
-            background-color: {_c(theme, "accent_pressed")};
-            border: 1px solid {_c(theme, "accent_pressed")};
-            color: {_c(theme, "on_accent")};
-        }}
-        QPushButton:focus {{
-            background-color: {_c(theme, "accent")};
-            color: {_c(theme, "on_accent")};
             border: 1px solid {_c(theme, "accent_hover")};
         }}
     """
@@ -1049,14 +1009,14 @@ def sidebar_button_stylesheet(theme: Dict[str, Any]) -> str:
 def danger_button_stylesheet(theme: Dict[str, Any]) -> str:
     return f"""
         QPushButton#dangerButton {{
-            background: transparent;
+            background-color: {_c(theme, "danger_bg")};
             color: {_c(theme, "danger_text")};
             border: 1px solid {_c(theme, "danger_border")};
             border-radius: {_r(theme, "button")}px;
-            padding: 6px 16px;
+            padding: 8px 20px;
             font-size: 13px;
             font-weight: 500;
-            min-height: 30px;
+            min-height: 32px;
         }}
         QPushButton#dangerButton:hover {{
             background-color: {_c(theme, "danger_hover")};
@@ -1064,20 +1024,6 @@ def danger_button_stylesheet(theme: Dict[str, Any]) -> str:
         }}
         QPushButton#dangerButton:pressed {{
             background-color: {_c(theme, "danger_hover")};
-        }}
-    """
-
-
-def dialog_title_stylesheet(theme: Dict[str, Any]) -> str:
-    size = theme.get("fonts", {}).get("size_title", 16)
-    return f"""
-        QLabel#dialogTitle {{
-            color: {_c(theme, "text")};
-            font-size: {size}px;
-            font-weight: 700;
-            background: transparent;
-            border: none;
-            padding: 0px;
         }}
     """
 
@@ -1284,29 +1230,9 @@ def history_search_bar_stylesheet(theme: dict) -> str:
 
 
 def history_footer_stylesheet(theme: dict) -> str:
-    """Stylesheet for the history dialog footer bar (scoped — does not cascade to children)."""
+    """Stylesheet for the history dialog footer."""
     c = theme["colors"]
-    bg = c.get("input_bg", "rgba(0, 0, 0, 40)")
-    return f"""
-        QWidget#historyFooter {{
-            background: {bg};
-            border-radius: 12px;
-        }}
-    """
-
-
-def history_footer_checkbox_stylesheet(theme: dict) -> str:
-    """History footer checkbox label — full contrast; indicator uses global QCheckBox QSS."""
-    c = theme["colors"]
-    tc = c.get("text", "#ffffff")
-    return f"""
-        QCheckBox {{
-            color: {tc};
-            font-size: 11px;
-            spacing: 8px;
-            background: transparent;
-        }}
-    """
+    return f"background: {c.get('input_bg', 'rgba(0,0,0,40)')}; border-radius: 12px;"
 
 
 def history_clear_all_button_stylesheet(theme: dict) -> str:
@@ -1396,7 +1322,6 @@ def _build_application_stylesheet_uncached(theme: Dict[str, Any]) -> str:
         primary_button_stylesheet(theme),
         sidebar_button_stylesheet(theme),
         danger_button_stylesheet(theme),
-        dialog_title_stylesheet(theme),
         group_header_stylesheet(theme),
         sticky_group_header_stylesheet(theme),
         separator_stylesheet(theme),
