@@ -4,13 +4,14 @@ from PyQt6.QtWidgets import QLabel, QPushButton, QVBoxLayout
 from src.frontend.glass_panel_dialog import GlassPanelDialog
 from src import __app_name__, __version__
 from src.constants import (
+    DIALOG_BTN_HEIGHT,
+    DIALOG_BTN_MIN_WIDTH,
     SUPPORT_DIALOG_DEFAULT,
     SUPPORT_DIALOG_MIN,
-    MARGIN_STANDARD,
     SUPPORT_LAYOUT_SPACING,
     SUPPORT_TITLE_FONT_SIZE,
-    SUPPORT_DONATE_BTN_MIN_HEIGHT,
 )
+from src.frontend.dialog_layout import apply_dialog_content_layout
 
 
 class SupportDialog(GlassPanelDialog):
@@ -24,7 +25,7 @@ class SupportDialog(GlassPanelDialog):
         self.setMinimumSize(*SUPPORT_DIALOG_MIN)
 
         layout = QVBoxLayout(self.bg_frame)
-        layout.setContentsMargins(*MARGIN_STANDARD)
+        apply_dialog_content_layout(layout)
         layout.setSpacing(SUPPORT_LAYOUT_SPACING)
 
         title = QLabel(f"\u2764\ufe0f Support {__app_name__}")
@@ -47,12 +48,15 @@ class SupportDialog(GlassPanelDialog):
 
         donate_btn = QPushButton("\u2615 Buy Me a Coffee")
         donate_btn.setObjectName("primaryButton")
-        donate_btn.setMinimumHeight(SUPPORT_DONATE_BTN_MIN_HEIGHT)
+        donate_btn.setFixedHeight(DIALOG_BTN_HEIGHT)
+        donate_btn.setMinimumWidth(DIALOG_BTN_MIN_WIDTH)
         donate_btn.clicked.connect(self._open_donate_link)
         layout.addWidget(donate_btn)
 
         close_btn = QPushButton("Close")
-        close_btn.setObjectName("primaryButton")
+        close_btn.setObjectName("ghostButton")
+        close_btn.setFixedHeight(DIALOG_BTN_HEIGHT)
+        close_btn.setMinimumWidth(DIALOG_BTN_MIN_WIDTH)
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn)
 

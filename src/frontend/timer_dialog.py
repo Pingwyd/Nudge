@@ -28,6 +28,8 @@ from src.constants import (
     SPACING_LG,
     SPACING_MD,
     TIMER_DEFAULT_INTERVAL_S,
+    DIALOG_BTN_HEIGHT,
+    DIALOG_BTN_MIN_WIDTH,
     TIMER_DIALOG_BTN_HEIGHT,
     TIMER_DIALOG_DEFAULT,
     TIMER_DIALOG_MIN,
@@ -213,15 +215,15 @@ class _TimerEditDialog(GlassPanelDialog):
         ok_btn = QPushButton("OK")
         ok_btn.setObjectName("primaryButton")
         ok_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        ok_btn.setFixedHeight(TIMER_DIALOG_BTN_HEIGHT)
-        ok_btn.setMinimumWidth(BTN_MIN_WIDTH_MD)
+        ok_btn.setFixedHeight(DIALOG_BTN_HEIGHT)
+        ok_btn.setMinimumWidth(DIALOG_BTN_MIN_WIDTH)
         ok_btn.clicked.connect(self.accept)
         btn_row.addWidget(ok_btn)
         cancel_btn = QPushButton("Cancel")
-        cancel_btn.setObjectName("primaryButton")
+        cancel_btn.setObjectName("ghostButton")
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        cancel_btn.setFixedHeight(TIMER_DIALOG_BTN_HEIGHT)
-        cancel_btn.setMinimumWidth(BTN_MIN_WIDTH_MD)
+        cancel_btn.setFixedHeight(DIALOG_BTN_HEIGHT)
+        cancel_btn.setMinimumWidth(DIALOG_BTN_MIN_WIDTH)
         cancel_btn.clicked.connect(self.reject)
         btn_row.addWidget(cancel_btn)
         outer.addLayout(btn_row)

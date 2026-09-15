@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout
+from src.frontend.dialog_layout import apply_dialog_content_layout
 from src.frontend.glass_panel_dialog import GlassPanelDialog
 from src import __app_name__, __version__
 from src.constants import (
+    DIALOG_BTN_HEIGHT,
+    DIALOG_BTN_MIN_WIDTH,
     WHATS_NEW_DIALOG_DEFAULT,
     WHATS_NEW_DIALOG_MIN,
-    MARGIN_STANDARD,
     SPACING_LG,
     FONT_SIZE_BODY,
     FONT_SIZE_TITLE_LG,
@@ -60,7 +62,7 @@ class WhatsNewDialog(GlassPanelDialog):
         self.setMinimumSize(*WHATS_NEW_DIALOG_MIN)
 
         layout = QVBoxLayout(self.bg_frame)
-        layout.setContentsMargins(*MARGIN_STANDARD)
+        apply_dialog_content_layout(layout)
         layout.setSpacing(SPACING_LG)
 
         title = QLabel(f"What\u2019s New in {__app_name__} v{__version__}")
@@ -80,6 +82,8 @@ class WhatsNewDialog(GlassPanelDialog):
         btn_row = QHBoxLayout()
         got_it = QPushButton("Got it!")
         got_it.setObjectName("primaryButton")
+        got_it.setFixedHeight(DIALOG_BTN_HEIGHT)
+        got_it.setMinimumWidth(DIALOG_BTN_MIN_WIDTH)
         got_it.clicked.connect(self.accept)
         btn_row.addWidget(got_it)
         layout.addLayout(btn_row)

@@ -16,7 +16,8 @@ from src.frontend.glass_panel_dialog import GlassPanelDialog
 from src.frontend.theme import get_theme, normalize_theme_id, refresh_glass_shells
 from src.constants import (
     BTN_HEIGHT_MD,
-    BTN_HEIGHT_SM,
+    DIALOG_BTN_HEIGHT,
+    DIALOG_BTN_MIN_WIDTH,
     DATE_EDIT_MIN_WIDTH,
     DURATION_APPLY_BTN_WIDTH,
     DURATION_INPUT_MIN_WIDTH,
@@ -95,7 +96,7 @@ class CustomReminderDialog(GlassPanelDialog):
         duration_apply = QPushButton("Set")
         duration_apply.setObjectName("ghostButton")
         duration_apply.setCursor(Qt.CursorShape.PointingHandCursor)
-        duration_apply.setFixedSize(DURATION_APPLY_BTN_WIDTH, BTN_HEIGHT_SM)
+        duration_apply.setFixedSize(DURATION_APPLY_BTN_WIDTH, DIALOG_BTN_HEIGHT)
         duration_row.addWidget(duration_apply)
         layout.addLayout(duration_row)
 
@@ -170,13 +171,15 @@ class CustomReminderDialog(GlassPanelDialog):
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setObjectName("ghostButton")
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        cancel_btn.setFixedHeight(BTN_HEIGHT_MD)
+        cancel_btn.setFixedHeight(DIALOG_BTN_HEIGHT)
+        cancel_btn.setMinimumWidth(DIALOG_BTN_MIN_WIDTH)
         cancel_btn.clicked.connect(self.reject)
         btn_row.addWidget(cancel_btn)
         set_btn = QPushButton("Set")
         set_btn.setObjectName("primaryButton")
         set_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        set_btn.setFixedHeight(BTN_HEIGHT_MD)
+        set_btn.setFixedHeight(DIALOG_BTN_HEIGHT)
+        set_btn.setMinimumWidth(DIALOG_BTN_MIN_WIDTH)
         set_btn.clicked.connect(self.accept)
         btn_row.addWidget(set_btn)
         layout.addLayout(btn_row)

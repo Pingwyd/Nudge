@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
 from src.backend.export_service import ExportFormat, ExportRequest, export_to_file, file_filter_for_format
 from src.backend.icon import get_app_icon
 from src.backend.task_groups import sorted_groups
+from src.frontend.dialog_layout import apply_dialog_content_layout
 from src.frontend.glass_panel_dialog import GlassPanelDialog
 from src.frontend.themed_message_dialog import ThemedMessageDialog
 from src.frontend.theme import (
@@ -36,7 +37,8 @@ from src.frontend.theme import (
     refresh_glass_shells,
 )
 from src.constants import (
-    BTN_HEIGHT_LG,
+    DIALOG_BTN_HEIGHT,
+    DIALOG_BTN_MIN_WIDTH,
     EXPORT_COMBO_HEIGHT,
     EXPORT_DIALOG_DEFAULT,
     EXPORT_DIALOG_MIN,
@@ -84,8 +86,7 @@ class ExportDialog(GlassPanelDialog):
         self.bg_frame.setGeometry(0, 0, w, h)
 
         layout = QVBoxLayout(self.bg_frame)
-        layout.setContentsMargins(*MARGIN_WIDE)
-        layout.setSpacing(SPACING_MD)
+        apply_dialog_content_layout(layout)
 
         # ── Title ──
         title = QLabel("Export Tasks")
@@ -177,7 +178,8 @@ class ExportDialog(GlassPanelDialog):
         buttons.setSpacing(SPACING_MD)
         export_btn = QPushButton("Choose file…")
         export_btn.setObjectName("primaryButton")
-        export_btn.setMinimumHeight(BTN_HEIGHT_LG)
+        export_btn.setFixedHeight(DIALOG_BTN_HEIGHT)
+        export_btn.setMinimumWidth(DIALOG_BTN_MIN_WIDTH)
         export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         export_btn.setDefault(True)
         export_btn.clicked.connect(self._run_export)
@@ -185,7 +187,8 @@ class ExportDialog(GlassPanelDialog):
 
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setObjectName("ghostButton")
-        cancel_btn.setMinimumHeight(BTN_HEIGHT_LG)
+        cancel_btn.setFixedHeight(DIALOG_BTN_HEIGHT)
+        cancel_btn.setMinimumWidth(DIALOG_BTN_MIN_WIDTH)
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel_btn.clicked.connect(self.reject)
         buttons.addWidget(cancel_btn, 1)
