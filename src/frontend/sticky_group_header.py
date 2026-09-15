@@ -44,3 +44,8 @@ def header_intersects_pin_band(
         return False
     header_bottom = header_top + header_height
     return header_top < pin_height and header_bottom > 0
+
+
+def should_conceal_in_list_header(section_group_id: str, pinned_id: str | None) -> bool:
+    """Only the pinned group's in-list header is concealed; peek rows stay visible."""
+    return pinned_id is not None and section_group_id == pinned_id

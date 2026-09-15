@@ -313,6 +313,11 @@ class TaskGroupSection(QWidget):
         self._apply_header_concealment()
         self.refresh_header_count()
 
+    def refresh_sticky_concealment(self) -> None:
+        """Re-apply conceal styles while pinned (e.g. after global QSS refresh)."""
+        if self._sticky_pin_hidden or self._sticky_peek_concealed:
+            self._apply_header_concealment()
+
     def set_search_type_label(self, enabled: bool) -> None:
         self._search_type_label = bool(enabled)
         self.refresh_header_count()

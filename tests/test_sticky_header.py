@@ -3,6 +3,7 @@
 from src.frontend.sticky_group_header import (
     header_intersects_pin_band,
     pick_sticky_section_index,
+    should_conceal_in_list_header,
 )
 
 
@@ -57,3 +58,17 @@ def test_header_intersects_pin_band():
     assert header_intersects_pin_band(50, 32, 40) is False
     assert header_intersects_pin_band(0, 0, 40) is False
     assert header_intersects_pin_band(0, 32, 0) is False
+
+
+def test_should_conceal_in_list_header_only_pinned():
+    assert should_conceal_in_list_header("a", "a") is True
+    assert should_conceal_in_list_header("b", "a") is False
+    assert should_conceal_in_list_header("a", None) is False
+
+
+def test_pick_sticky_while_header_sliver_in_top_band():
+    """Short viewport: header mostly scrolled off but still intersects top."""
+    candidates = [
+        (False, -28, 32, 80),
+    ]
+    assert pick_sticky_section_index(candidates) == 0
