@@ -1,28 +1,20 @@
 """Themed glass-panel input dialog replacing QInputDialog (Fix C1)."""
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QPushButton,
-    QSizePolicy,
-    QVBoxLayout,
-)
+from PyQt6.QtWidgets import QLabel, QLineEdit, QVBoxLayout
 
+from src.frontend.dialog_layout import (
+    add_dialog_footer,
+    apply_dialog_content_layout,
+    make_dialog_title,
+)
 from src.frontend.glass_panel_dialog import GlassPanelDialog
 from src.constants import (
-    INPUT_DIALOG_SIZE,
-    INPUT_DIALOG_MIN_SIZE,
-    INPUT_DIALOG_MAIN_LAYOUT_MARGINS,
-    INPUT_DIALOG_LAYOUT_SPACING,
-    INPUT_FIELD_MIN_HEIGHT,
-    INPUT_DIALOG_BTN_HEIGHT,
-    INPUT_DIALOG_BTN_MIN_WIDTH,
-    RADIUS_PANEL,
+    DIALOG_INPUT_MIN_HEIGHT,
     FONT_SIZE_LABEL_MD,
-    FONT_SIZE_TITLE_MD,
-    SPACING_MD,
+    INPUT_DIALOG_MIN_SIZE,
+    INPUT_DIALOG_SIZE,
+    RADIUS_PANEL,
 )
 
 
@@ -45,69 +37,48 @@ class ThemedInputDialog(GlassPanelDialog):
         self.setMinimumSize(*INPUT_DIALOG_MIN_SIZE)
 
         layout = QVBoxLayout(self.bg_frame)
-        layout.setContentsMargins(*INPUT_DIALOG_MAIN_LAYOUT_MARGINS)
-        layout.setSpacing(INPUT_DIALOG_LAYOUT_SPACING)
+        apply_dialog_content_layout(layout)
 
         if title:
-            title_lbl = QLabel(title)
-            title_lbl.setObjectName("dialogTitle")
-            font = title_lbl.font()
-            font.setPointSize(FONT_SIZE_TITLE_MD)
-            font.setBold(True)
-            title_lbl.setFont(font)
-            layout.addWidget(title_lbl)
+            layout.addWidget(make_dialog_title(title))
 
         if label and label != title:
             prompt = QLabel(label)
             prompt.setAlignment(Qt.AlignmentFlag.AlignLeft)
             font = prompt.font()
-            font.setPointSize(FONT_SIZE_LABEL_MD)
+            font.setPixelSize(FONT_SIZE_LABEL_MD)
             prompt.setFont(font)
             layout.addWidget(prompt)
 
         self._input = QLineEdit()
         self._input.setText(default_text)
-        self._input.setMinimumHeight(INPUT_FIELD_MIN_HEIGHT)
+        self._input.setMinimumHeight(DIALOG_INPUT_MIN_HEIGHT)
         if placeholder:
             self._input.setPlaceholderText(placeholder)
         elif not default_text:
             self._input.setPlaceholderText(label or "Name")
         layout.addWidget(self._input)
 
-        layout.addSpacing(12)
-
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(SPACING_MD)
-        btn_row.addStretch(1)
-
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.setObjectName("ghostButton")
-        cancel_btn.setFixedHeight(INPUT_DIALOG_BTN_HEIGHT)
-        cancel_btn.setMinimumWidth(INPUT_DIALOG_BTN_MIN_WIDTH)
-        cancel_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        cancel_btn.clicked.connect(self.reject)
-        btn_row.addWidget(cancel_btn)
-
-        ok_btn = QPushButton(ok_label)
-        ok_btn.setObjectName("primaryButton")
-        ok_btn.setFixedHeight(INPUT_DIALOG_BTN_HEIGHT)
-        ok_btn.setMinimumWidth(max(INPUT_DIALOG_BTN_MIN_WIDTH, 64))
-        ok_btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        ok_btn.setDefault(True)
-        ok_btn.clicked.connect(self.accept)
-        btn_row.addWidget(ok_btn)
-
-        layout.addLayout(btn_row)
+        add_dialog_footer(
+            layout,
+            [
+                ("Cancel", "ghost", self.reject),
+                (ok_label, "primary", self.accept),
+            ],
+        )
 
         self._input.setFocus()
         self._input.selectAll()
+        self.adjustSize()
+        w = max(self.width(), INPUT_DIALOG_MIN_SIZE[0])
+        h = max(self.height(), INPUT_DIALOG_MIN_SIZE[1])
+        self.resize(w, h)
         self._center_on_parent()
 
     def _center_on_parent(self) -> None:
         parent = self.parent()
         if parent is None:
             return
-        self.adjustSize()
         pg = parent.frameGeometry()
         x = pg.x() + (pg.width() - self.width()) // 2
         y = pg.y() + (pg.height() - self.height()) // 2

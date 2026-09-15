@@ -30,6 +30,8 @@ from src.constants import (
     SPACING_LG,
     SPACING_MD,
     SPACING_SM,
+    DIALOG_BTN_HEIGHT,
+    DIALOG_BTN_MIN_WIDTH,
     TIMER_DIALOG_BTN_HEIGHT,
 )
 
@@ -168,29 +170,10 @@ class RemindersListDialog(GlassPanelDialog):
             layout.addWidget(reminder_list, 1)
 
             cancel_btn = QPushButton("Cancel Selected")
+            cancel_btn.setObjectName("ghostButton")
+            cancel_btn.setFixedHeight(DIALOG_BTN_HEIGHT)
+            cancel_btn.setMinimumWidth(DIALOG_BTN_MIN_WIDTH)
             cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            cancel_btn.setMinimumHeight(TIMER_DIALOG_BTN_HEIGHT)
-            cancel_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {input_bg};
-                    color: {tc};
-                    border: 1px solid {border_c};
-                    border-radius: {SPACING_SM}px;
-                    padding: 6px 16px;
-                    font-weight: 500;
-                }}
-                QPushButton:hover {{
-                    background-color: {hover};
-                    border-color: {_c(theme, "border_highlight")};
-                }}
-                QPushButton:pressed {{
-                    background-color: {hover_strong};
-                }}
-                QPushButton:disabled {{
-                    color: {tmc};
-                    border-color: {border_c};
-                }}
-            """)
             cancel_btn.clicked.connect(lambda: self._cancel_selected(reminder_list))
             layout.addWidget(cancel_btn)
             self.setFixedSize(*REMINDERS_LIST_FILLED_STATE_SIZE)

@@ -30,19 +30,20 @@ from src.frontend.theme import (
     refresh_glass_shells,
 )
 from src.constants import (
+    DIALOG_BTN_HEIGHT,
+    DIALOG_BTN_MIN_WIDTH,
+    MESSAGE_BTN_GAP,
+    MESSAGE_CONTENT_PAD_H,
+    MESSAGE_DIALOG_BOTTOM_PAD,
     MESSAGE_DIALOG_DEFAULT,
     MESSAGE_DIALOG_MIN_WIDTH,
+    MESSAGE_LAYOUT_SPACING,
+    MESSAGE_MIN_WIDTH_FLOOR,
+    MESSAGE_SIZING_HEIGHT,
     MARGIN_WIDE,
     SPACING_MD,
-    BTN_HEIGHT_SM,
-    BTN_MIN_WIDTH_SM,
-    MESSAGE_MIN_WIDTH_FLOOR,
-    MESSAGE_CONTENT_PAD_H,
-    MESSAGE_SIZING_HEIGHT,
-    MESSAGE_BTN_GAP,
-    MESSAGE_LAYOUT_SPACING,
-    MESSAGE_DIALOG_BOTTOM_PAD,
 )
+from src.frontend.dialog_layout import apply_dialog_content_layout
 
 
 class ThemedMessageDialog(GlassPanelDialog):
@@ -71,8 +72,7 @@ class ThemedMessageDialog(GlassPanelDialog):
         self.bg_frame.setGeometry(0, 0, *MESSAGE_DIALOG_DEFAULT)
 
         layout = QVBoxLayout(self.bg_frame)
-        layout.setContentsMargins(*MARGIN_WIDE)
-        layout.setSpacing(MESSAGE_LAYOUT_SPACING)
+        apply_dialog_content_layout(layout)
 
         self._title_label = QLabel(title)
         self._title_label.setStyleSheet("font-weight: bold;")
@@ -90,8 +90,8 @@ class ThemedMessageDialog(GlassPanelDialog):
         for i, label in enumerate(buttons):
             btn = QPushButton(label)
             btn.setObjectName("ghostButton")
-            btn.setFixedHeight(BTN_HEIGHT_SM)
-            btn.setMinimumWidth(BTN_MIN_WIDTH_SM)
+            btn.setFixedHeight(DIALOG_BTN_HEIGHT)
+            btn.setMinimumWidth(DIALOG_BTN_MIN_WIDTH)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(lambda checked, idx=i: self._on_button_clicked(idx))
             self._buttons.append(btn)
@@ -125,7 +125,7 @@ class ThemedMessageDialog(GlassPanelDialog):
         fm = QFontMetrics(self._msg_label.font())
         bounds = fm.boundingRect(0, 0, text_w, 10000, int(Qt.TextFlag.TextWordWrap), self._msg_label.text())
 
-        btn_h = BTN_HEIGHT_SM
+        btn_h = DIALOG_BTN_HEIGHT
 
         total_h = m.top() + title_h + sp + bounds.height() + MESSAGE_BTN_GAP + sp + btn_h + m.bottom() + MESSAGE_DIALOG_BOTTOM_PAD
         self.resize(available_w, total_h)

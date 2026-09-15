@@ -21,19 +21,22 @@ from src.frontend.frameless_chrome import FramelessChromeController
 from src.frontend.glass_panel_dialog import GlassPanelDialog
 from src.frontend.history_row import HistoryRowWidget
 from src.frontend.themed_message_dialog import ThemedMessageDialog
-from src.frontend.theme import (_r, get_theme, history_clear_all_button_stylesheet,
-                                history_count_badge_stylesheet,
+from src.frontend.theme import (_r, get_theme, history_count_badge_stylesheet,
+                                history_footer_checkbox_stylesheet,
                                 history_footer_stylesheet,
                                 history_header_card_stylesheet,
                                 history_search_bar_stylesheet,
                                 history_title_stylesheet,
-                                normalize_theme_id)
-from src.constants import (FONT_SIZE_BODY, FONT_SIZE_LABEL_MD,
-                           FONT_SIZE_LABEL_SM, FONT_SIZE_TITLE_MD,
-                           HISTORY_CARD_SPACING, HISTORY_COUNT_BADGE_SIZE,
-                           HISTORY_DIALOG_DEFAULT, HISTORY_DIALOG_MIN,
-                           HISTORY_FOOTER_MARGINS, HISTORY_FOOTER_SPACING,
-                           HISTORY_HEADER_CARD_MARGINS, HISTORY_HEADER_SPACING,
+                                normalize_theme_id,
+                                push_button_primary_stylesheet)
+from src.constants import (DIALOG_BTN_HEIGHT, DIALOG_CONTENT_MARGINS,
+                           FONT_SIZE_BODY, FONT_SIZE_LABEL_MD,
+                           FONT_SIZE_LABEL_SM,
+                           FONT_SIZE_TITLE_MD, HISTORY_CARD_SPACING,
+                           HISTORY_COUNT_BADGE_SIZE, HISTORY_DIALOG_DEFAULT,
+                           HISTORY_DIALOG_MIN, HISTORY_FOOTER_MARGINS,
+                           HISTORY_FOOTER_SPACING, HISTORY_HEADER_CARD_MARGINS,
+                           HISTORY_HEADER_SPACING, HISTORY_LIST_SIDE_PAD,
                            HISTORY_SEPARATOR_HEIGHT, HISTORY_STATS_BAR_MIN_HEIGHT,
                            HISTORY_STATS_GAP, RADIUS_PANEL, SPACING_LG)
 
@@ -78,7 +81,7 @@ class HistoryDialog(GlassPanelDialog):
         danger_text = c.get("danger_text", "#ff5555")
 
         layout = QVBoxLayout(self.bg_frame)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(*DIALOG_CONTENT_MARGINS)
         layout.setSpacing(0)
 
         header_card = QWidget()
@@ -117,7 +120,11 @@ class HistoryDialog(GlassPanelDialog):
 
         self._stats_bar = QLabel()
         self._stats_bar.setMinimumHeight(HISTORY_STATS_BAR_MIN_HEIGHT)
-        self._stats_bar.setStyleSheet(f"color: {tmc}; font-size: {FONT_SIZE_LABEL_MD}px; font-weight: bold; background: transparent; border: none; padding: 2px 20px;")
+        self._stats_bar.setStyleSheet(
+            f"color: {tmc}; font-size: {FONT_SIZE_LABEL_MD}px; font-weight: bold; "
+            f"background: transparent; border: none; "
+            f"padding: 2px {HISTORY_LIST_SIDE_PAD}px;"
+        )
         layout.addWidget(self._stats_bar)
 
         self.scroll_area = QScrollArea(self)
@@ -151,6 +158,7 @@ class HistoryDialog(GlassPanelDialog):
         layout.addWidget(separator)
 
         footer = QWidget()
+        footer.setObjectName("historyFooter")
         footer.setStyleSheet(history_footer_stylesheet(theme))
         self._footer = footer
         footer_layout = QHBoxLayout(footer)
@@ -159,7 +167,9 @@ class HistoryDialog(GlassPanelDialog):
 
         self.skip_delete_cb = QCheckBox("Skip confirmation")
         self.skip_delete_cb.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.skip_delete_cb.setStyleSheet(f"font-size: {FONT_SIZE_LABEL_SM}px; color: {tmc}; background: transparent; spacing: 6px;")
+        self.skip_delete_cb.setMinimumWidth(148)
+        self.skip_delete_cb.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        self.skip_delete_cb.setStyleSheet(history_footer_checkbox_stylesheet(theme))
         if self._state_manager:
             skip = self._state_manager.state.get("historySkipDeleteConfirm", False)
             self.skip_delete_cb.setChecked(skip)
@@ -169,17 +179,24 @@ class HistoryDialog(GlassPanelDialog):
         footer_layout.addStretch()
 
         clear_all_btn = QPushButton("Clear all")
+        clear_all_btn.setObjectName("dangerButton")
+        clear_all_btn.setFixedHeight(DIALOG_BTN_HEIGHT)
+        clear_all_btn.setMinimumWidth(72)
         clear_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        clear_all_btn.setStyleSheet(history_clear_all_button_stylesheet(theme))
         clear_all_btn.clicked.connect(self.clear_all_history)
         self._clear_all_btn = clear_all_btn
         footer_layout.addWidget(clear_all_btn)
 
         close_btn = QPushButton("Close")
         close_btn.setObjectName("primaryButton")
+        close_btn.setFixedHeight(DIALOG_BTN_HEIGHT)
+        close_btn.setMinimumWidth(72)
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setAutoFillBackground(True)
+        close_btn.setStyleSheet(push_button_primary_stylesheet(theme))
         close_btn.setDefault(True)
         close_btn.clicked.connect(self.accept)
+        self._close_btn = close_btn
         footer_layout.addWidget(close_btn)
 
         layout.addWidget(footer)
@@ -212,7 +229,7 @@ class HistoryDialog(GlassPanelDialog):
         if hasattr(self, '_stats_bar') and self._stats_bar:
             self._stats_bar.setStyleSheet(
                 f"color: {tmc}; font-size: {FONT_SIZE_LABEL_MD}px; font-weight: bold; "
-                f"background: transparent; border: none; padding: 2px 20px;"
+                f"background: transparent; border: none; padding: 2px {HISTORY_LIST_SIDE_PAD}px;"
             )
         if hasattr(self, '_empty_state_widget') and self._empty_state_widget:
             self._empty_state_widget.setStyleSheet(
@@ -223,12 +240,10 @@ class HistoryDialog(GlassPanelDialog):
             self._separator.setStyleSheet(f"background: {border_c};")
         if hasattr(self, '_footer'):
             self._footer.setStyleSheet(history_footer_stylesheet(theme))
-        if hasattr(self, 'skip_delete_cb'):
-            self.skip_delete_cb.setStyleSheet(
-                f"font-size: {FONT_SIZE_LABEL_SM}px; color: {tmc}; background: transparent; spacing: 6px;"
-            )
-        if hasattr(self, '_clear_all_btn'):
-            self._clear_all_btn.setStyleSheet(history_clear_all_button_stylesheet(theme))
+        if hasattr(self, "skip_delete_cb"):
+            self.skip_delete_cb.setStyleSheet(history_footer_checkbox_stylesheet(theme))
+        if hasattr(self, "_close_btn"):
+            self._close_btn.setStyleSheet(push_button_primary_stylesheet(theme))
 
     def _filter_history(self, text):
         from src.frontend.history_row import HistoryRowWidget

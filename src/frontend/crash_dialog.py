@@ -31,6 +31,8 @@ from src.constants import (
     PROGRESS_BAR_RADIUS,
     DIALOG_BORDER_WIDTH,
     DIALOG_BTN_ALPHA,
+    DIALOG_BTN_HEIGHT,
+    DIALOG_BTN_MIN_WIDTH,
     DIALOG_BTN_PAD_H,
     DIALOG_EDIT_ALPHA,
     DIALOG_EDIT_PAD,
@@ -101,18 +103,24 @@ class CrashDialog(GlassPanelDialog):
 
         self._restart_btn = QPushButton("Restart Nudge")
         self._restart_btn.setObjectName("primaryButton")
+        self._restart_btn.setFixedHeight(DIALOG_BTN_HEIGHT)
+        self._restart_btn.setMinimumWidth(DIALOG_BTN_MIN_WIDTH)
         self._restart_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._restart_btn.clicked.connect(self._restart_app)
         btn_layout.addWidget(self._restart_btn)
 
         self._report_btn = QPushButton("Copy Report")
         self._report_btn.setObjectName("ghostButton")
+        self._report_btn.setFixedHeight(DIALOG_BTN_HEIGHT)
+        self._report_btn.setMinimumWidth(DIALOG_BTN_MIN_WIDTH)
         self._report_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._report_btn.clicked.connect(self._copy_report)
         btn_layout.addWidget(self._report_btn)
 
         send_btn = QPushButton("Send Report")
         send_btn.setObjectName("ghostButton")
+        send_btn.setFixedHeight(DIALOG_BTN_HEIGHT)
+        send_btn.setMinimumWidth(DIALOG_BTN_MIN_WIDTH)
         send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         send_btn.clicked.connect(self._send_report)
         btn_layout.addWidget(send_btn)
